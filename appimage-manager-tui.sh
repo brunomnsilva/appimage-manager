@@ -30,17 +30,18 @@ shorten_home() {
 	esac
 }
 
-# Boxed application title.
+# Boxed application title (emoji rendered via gum's emoji formatter).
 app_title() {
-	gum style \
-		--border double \
-		--border-foreground 212 \
-		--foreground 212 \
-		--bold \
-		--align center \
-		--padding "1 4" \
-		--margin "1 0 1 0" \
-		"appimage-manager"
+	printf '%s\n' ':toolbox: appimage-manager' |
+		gum format --type emoji |
+		gum style \
+			--border double \
+			--border-foreground 212 \
+			--foreground 212 \
+			--bold \
+			--align center \
+			--padding "1 4" \
+			--margin "1 0 1 0"
 }
 
 # Transient outcome message shown at the top of the main menu.
