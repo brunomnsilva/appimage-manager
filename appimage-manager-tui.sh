@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-# appimage-install-tui.sh
-# Interactive (gum-based) frontend for appimage-install.
+# appimage-manager-tui.sh
+# Interactive (gum-based) frontend for appimage-manager.
 
 # ===BUNDLE_CORE_HERE===
 
@@ -40,7 +40,7 @@ app_title() {
 		--align center \
 		--padding "1 4" \
 		--margin "1 0 1 0" \
-		"appimage-install"
+		"appimage-manager"
 }
 
 # Transient outcome message shown at the top of the main menu.
@@ -395,7 +395,7 @@ Install, list, and uninstall AppImages into your user environment.
 The **Status** column on the List screen:
 
 - **tracked** — installed by this tool and recorded in its registry
-  (`~/.local/share/appimage-install/registry.tsv`), so it can be cleanly removed.
+  (`~/.local/share/appimage-manager/registry.tsv`), so it can be cleanly removed.
 - **legacy** — an AppImage found in `~/Applications` that is not in the registry
   (installed before tracking existed, or added manually); it can still be uninstalled.
 

@@ -1,11 +1,11 @@
-# AppImage Install
+# AppImage Manager
 
 Install and integrate an AppImage into your user environment — no root required. The tool copies the AppImage to `~/Applications`, creates a desktop launcher in `~/.local/share/applications/`, and installs an icon in `~/.local/share/icons/` so the app shows up in your application menu.
 
 It ships with two frontends that share the same core logic:
 
-- `appimage-install.sh` — a scriptable command-line interface.
-- `appimage-install-tui.sh` — an interactive TUI (powered by [gum](https://github.com/charmbracelet/gum)) for installing, listing, and uninstalling AppImages.
+- `appimage-manager.sh` — a scriptable command-line interface.
+- `appimage-manager-tui.sh` — an interactive TUI (powered by [gum](https://github.com/charmbracelet/gum)) for installing, listing, and uninstalling AppImages.
 
 ---
 
@@ -30,8 +30,8 @@ It ships with two frontends that share the same core logic:
 ## Project structure
 
 ```
-appimage-install.sh          # CLI entrypoint
-appimage-install-tui.sh      # TUI entrypoint (gum)
+appimage-manager.sh          # CLI entrypoint
+appimage-manager-tui.sh      # TUI entrypoint (gum)
 lib/core.sh                  # shared library (no side effects)
 scripts/build.sh             # bundles lib/core.sh into dist/ entrypoints
 Makefile                     # bundle / test / lint / fmt / clean
@@ -43,8 +43,8 @@ tests/run-tests.sh           # headless test harness
 ### CLI
 
 ```bash
-chmod +x appimage-install.sh
-./appimage-install.sh ~/Downloads/Obsidian.AppImage
+chmod +x appimage-manager.sh
+./appimage-manager.sh ~/Downloads/Obsidian.AppImage
 ```
 
 This copies the AppImage to `~/Applications/`, writes
@@ -54,8 +54,8 @@ be extracted.
 ### TUI
 
 ```bash
-chmod +x appimage-install-tui.sh
-./appimage-install-tui.sh
+chmod +x appimage-manager-tui.sh
+./appimage-manager-tui.sh
 ```
 
 The TUI walks you through an install, or lets you list and uninstall existing
@@ -77,16 +77,16 @@ apps from the main menu.
 
 ```bash
 # Basic install
-./appimage-install.sh ~/Downloads/Obsidian-1.5.3.AppImage
+./appimage-manager.sh ~/Downloads/Obsidian-1.5.3.AppImage
 
 # Custom name and icon
-./appimage-install.sh --name "Obsidian" --icon ~/Pictures/obsidian.svg ~/Downloads/Obsidian.AppImage
+./appimage-manager.sh --name "Obsidian" --icon ~/Pictures/obsidian.svg ~/Downloads/Obsidian.AppImage
 
 # Chromium-based app that needs --no-sandbox
-./appimage-install.sh --name "Brave" --exec-args "--no-sandbox" ~/Downloads/Brave.AppImage
+./appimage-manager.sh --name "Brave" --exec-args "--no-sandbox" ~/Downloads/Brave.AppImage
 
 # Overwrite an existing install
-./appimage-install.sh --force ~/Downloads/Foo.AppImage
+./appimage-manager.sh --force ~/Downloads/Foo.AppImage
 ```
 
 ## TUI usage
@@ -137,7 +137,7 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 Installed apps are tracked in:
 
 ```
-${XDG_DATA_HOME:-~/.local/share}/appimage-install/registry.tsv
+${XDG_DATA_HOME:-~/.local/share}/appimage-manager/registry.tsv
 ```
 
 Each row stores the slug, name, AppImage path, desktop path, icon path, and
@@ -150,8 +150,8 @@ scanning `~/Applications/*.AppImage` and shown as "legacy".
 self-contained single files:
 
 ```
-dist/appimage-install.sh
-dist/appimage-install-tui.sh
+dist/appimage-manager.sh
+dist/appimage-manager-tui.sh
 ```
 
 Attach these to a release and end users only need the one file. `dist/` is

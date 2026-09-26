@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# lib/core.sh — shared library for appimage-install (functions only; no side effects)
+# lib/core.sh — shared library for appimage-manager (functions only; no side effects)
 #
 # Source this file (or rely on it being inlined by scripts/build.sh) before
 # calling core_install, core_list, or core_uninstall.
@@ -47,9 +47,9 @@ is_appimage() {
 	# $1 file
 	# Non-executing validity check: an AppImage is an ELF with the "AI" magic
 	# at offset 8 (type-1 "AI\x01" / type-2 "AI\x02").
-	# APPIMAGE_INSTALL_SKIP_VALIDATE=1 bypasses the check (used by tests).
+	# APPIMAGE_MANAGER_SKIP_VALIDATE=1 bypasses the check (used by tests).
 	[ -f "$1" ] || return 1
-	if [ "${APPIMAGE_INSTALL_SKIP_VALIDATE:-0}" = "1" ]; then
+	if [ "${APPIMAGE_MANAGER_SKIP_VALIDATE:-0}" = "1" ]; then
 		return 0
 	fi
 	local magic
@@ -139,7 +139,7 @@ try_extract_icon_from_appimage() {
 
 get_data_dir() { printf '%s' "${XDG_DATA_HOME:-$HOME/.local/share}"; }
 get_install_dir() { printf '%s' "$HOME/Applications"; }
-get_registry_file() { printf '%s/appimage-install/registry.tsv' "$(get_data_dir)"; }
+get_registry_file() { printf '%s/appimage-manager/registry.tsv' "$(get_data_dir)"; }
 
 # --- Core operations --------------------------------------------------------
 

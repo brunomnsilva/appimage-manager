@@ -12,7 +12,7 @@ export HOME="$TESTHOME"
 export XDG_DATA_HOME="$TESTHOME/.local/share"
 # Test stubs are shell scripts, not real AppImages; skip validation for the
 # install/uninstall flows (the real check is tested separately below).
-export APPIMAGE_INSTALL_SKIP_VALIDATE=1
+export APPIMAGE_MANAGER_SKIP_VALIDATE=1
 
 pass=0
 fail=0
@@ -61,7 +61,7 @@ printf '\x7f\x45\x4c\x46\x02\x01\x01\x00AI' >"$realapp"
 # --- is_appimage validation -------------------------------------------------
 
 if (
-	unset APPIMAGE_INSTALL_SKIP_VALIDATE
+	unset APPIMAGE_MANAGER_SKIP_VALIDATE
 	is_appimage "$realapp"
 ); then
 	ok "is_appimage accepts ELF+AI magic"
@@ -70,7 +70,7 @@ else
 fi
 
 if (
-	unset APPIMAGE_INSTALL_SKIP_VALIDATE
+	unset APPIMAGE_MANAGER_SKIP_VALIDATE
 	is_appimage "$icon"
 ); then
 	bad "is_appimage rejects non-AppImage"
@@ -79,7 +79,7 @@ else
 fi
 
 if (
-	unset APPIMAGE_INSTALL_SKIP_VALIDATE
+	unset APPIMAGE_MANAGER_SKIP_VALIDATE
 	core_install --appimage "$icon" --name "Bad" >/dev/null 2>&1
 ); then
 	bad "core_install hard-rejects non-AppImage"
@@ -104,7 +104,7 @@ fi
 assert_file "$HOME/Applications/Test App.AppImage" "install copies AppImage"
 assert_file "$HOME/.local/share/applications/test-app.desktop" "install writes desktop entry"
 assert_file "$HOME/.local/bin/test-app-appimage-launcher" "install writes wrapper"
-assert_file "$HOME/.local/share/appimage-install/registry.tsv" "install writes registry"
+assert_file "$HOME/.local/share/appimage-manager/registry.tsv" "install writes registry"
 
 desktop="$HOME/.local/share/applications/test-app.desktop"
 assert_grep '^Name=Test App$' "$desktop" "desktop Name correct"
@@ -175,7 +175,7 @@ fi
 assert_nofile "$HOME/Applications/Test App.AppImage" "uninstall removes AppImage"
 assert_nofile "$HOME/.local/share/applications/test-app.desktop" "uninstall removes desktop entry"
 assert_nofile "$HOME/.local/bin/test-app-appimage-launcher" "uninstall removes wrapper"
-if grep -q $'^test-app\t' "$HOME/.local/share/appimage-install/registry.tsv" 2>/dev/null; then
+if grep -q $'^test-app\t' "$HOME/.local/share/appimage-manager/registry.tsv" 2>/dev/null; then
 	bad "uninstall removes registry row"
 else
 	ok "uninstall removes registry row"
@@ -183,27 +183,27 @@ fi
 
 # --- Legacy scan (pre-registry) ----------------------------------------------
 
-rm -f "$HOME/.local/share/appimage-install/registry.tsv"
+rm -f "$HOME/.local/share/appimage-manager/registry.tsv"
 core_list >"$FIX/list-legacy.tsv"
 assert_grep $'^iconed-app\t' "$FIX/list-legacy.tsv" "legacy scan finds iconed-app"
 assert_grep $'\t0$' "$FIX/list-legacy.tsv" "legacy rows marked untracked"
 
 # --- CLI entrypoint ---------------------------------------------------------
 
-if bash "$ROOT/appimage-install.sh" --name "CLI App" "$stub" >/dev/null 2>&1; then
+if bash "$ROOT/appimage-manager.sh" --name "CLI App" "$stub" >/dev/null 2>&1; then
 	ok "CLI entrypoint installs"
 else
 	bad "CLI entrypoint installs"
 fi
 assert_file "$HOME/Applications/CLI App.AppImage" "CLI entrypoint copies AppImage"
 
-if bash "$ROOT/appimage-install.sh" --help >/dev/null 2>&1; then
+if bash "$ROOT/appimage-manager.sh" --help >/dev/null 2>&1; then
 	ok "CLI --help exits 0"
 else
 	bad "CLI --help exits 0"
 fi
 
-if bash "$ROOT/appimage-install.sh" /nonexistent.AppImage >/dev/null 2>&1; then
+if bash "$ROOT/appimage-manager.sh" /nonexistent.AppImage >/dev/null 2>&1; then
 	bad "CLI errors on missing file"
 else
 	ok "CLI errors on missing file"

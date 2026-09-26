@@ -2,7 +2,7 @@
 
 ## Project
 
-`appimage-install` installs AppImages into the user environment
+`appimage-manager` installs AppImages into the user environment
 (`~/Applications`, `~/.local/share/applications`, `~/.local/share/icons`) and
 integrates them with the desktop menu. It ships a CLI and a gum-based TUI that
 share a single library.
@@ -10,8 +10,8 @@ share a single library.
 ## Layout
 
 - `lib/core.sh` — shared library (functions only, no side effects).
-- `appimage-install.sh` — CLI entrypoint.
-- `appimage-install-tui.sh` — TUI entrypoint (requires `gum`).
+- `appimage-manager.sh` — CLI entrypoint.
+- `appimage-manager-tui.sh` — TUI entrypoint (requires `gum`).
 - `scripts/build.sh` — bundles `lib/core.sh` into standalone `dist/` entrypoints.
 - `tests/run-tests.sh` — headless test harness.
 
@@ -20,7 +20,7 @@ share a single library.
 - `make test` — shellcheck + shfmt check + bundle + tests.
 - `make lint` — shellcheck only.
 - `make fmt` — `shfmt -w` on all sources.
-- `make bundle` — generate `dist/appimage-install.sh` and `dist/appimage-install-tui.sh`.
+- `make bundle` — generate `dist/appimage-manager.sh` and `dist/appimage-manager-tui.sh`.
 - `make clean` — remove `dist/`.
 
 ## Conventions

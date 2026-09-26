@@ -24,8 +24,8 @@ bundle_entry() {
 	chmod +x "$out"
 }
 
-bundle_entry "$ROOT/appimage-install.sh" "$DIST/appimage-install.sh"
-bundle_entry "$ROOT/appimage-install-tui.sh" "$DIST/appimage-install-tui.sh"
+bundle_entry "$ROOT/appimage-manager.sh" "$DIST/appimage-manager.sh"
+bundle_entry "$ROOT/appimage-manager-tui.sh" "$DIST/appimage-manager-tui.sh"
 
 printf 'Bundled %s and %s\n' \
-	"$DIST/appimage-install.sh" "$DIST/appimage-install-tui.sh"
+	"$DIST/appimage-manager.sh" "$DIST/appimage-manager-tui.sh"

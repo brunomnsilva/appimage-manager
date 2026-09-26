@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-# appimage-install.sh
+# appimage-manager.sh
 # Installs an AppImage into ~/Applications, writes a .desktop launcher into
 # ~/.local/share/applications, and copies an icon to ~/.local/share/icons.
 
@@ -16,7 +16,7 @@ fi
 
 usage() {
 	cat <<'USAGE'
-Usage: appimage-install.sh [OPTIONS] /path/to/AppImage
+Usage: appimage-manager.sh [OPTIONS] /path/to/AppImage
 
 Installs an AppImage into ~/Applications and integrates it with a desktop entry and icon.
 
