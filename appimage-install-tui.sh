@@ -384,6 +384,13 @@ Install, list, and uninstall AppImages into your user environment.
 - **List** — show what is currently installed.
 - **Uninstall** — remove an installed AppImage and its launcher.
 
+The **Status** column on the List screen:
+
+- **tracked** — installed by this tool and recorded in its registry
+  (`~/.local/share/appimage-install/registry.tsv`), so it can be cleanly removed.
+- **legacy** — an AppImage found in `~/Applications` that is not in the registry
+  (installed before tracking existed, or added manually); it can still be uninstalled.
+
 All changes stay under your home directory (no root required).
 EOF
 	pause_key
