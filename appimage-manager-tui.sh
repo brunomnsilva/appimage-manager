@@ -323,11 +323,11 @@ tui_list() {
 	local name appimage tracked
 	{
 		while IFS=$'\t' read -r _ name appimage _ _ _ tracked; do
-			local status="tracked"
-			[ "$tracked" = "0" ] && status="legacy"
+			local status="🟢 tracked"
+			[ "$tracked" = "0" ] && status="🔴 legacy"
 			printf '%s\t%s\t%s\n' "$name" "$(shorten_home "$appimage")" "$status"
 		done <<<"$rows"
-	} | gum table --print --separator $'\t' --columns "Name,Path,Status" --widths 30,45,10
+	} | gum table --print --separator $'\t' --columns "Name,Path,Status" --widths 30,45,12
 	pause_key
 }
 
