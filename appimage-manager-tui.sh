@@ -273,12 +273,15 @@ tui_install() {
 				force=false
 			fi
 
+			local icon_display="<auto>"
+			[ -n "$icon" ] && icon_display=$(shorten_home "$icon")
+
 			{
-				printf 'AppImage:   %s\n' "$appimage"
+				printf 'AppImage:   %s\n' "$(shorten_home "$appimage")"
 				printf 'Name:       %s\n' "$name"
 				printf 'Categories: %s\n' "$categories"
 				printf 'Exec args:  %s\n' "${exec_args:-<none>}"
-				printf 'Icon:       %s\n' "${icon:-<auto>}"
+				printf 'Icon:       %s\n' "$icon_display"
 				printf 'Overwrite:  %s\n' "$force"
 			} | gum style --border rounded --padding "1 2"
 
@@ -294,7 +297,8 @@ tui_install() {
 			gum spin --spinner dot --title "Installing $name…" --show-output -- \
 				bash -c 'set -Eeuo pipefail; core_install "$@"' _ "${args[@]}"
 
-			STATUS="Installed: $name"
+			gum style --foreground 212 --bold "Installed: $name"
+			pause_key
 			step="done"
 			;;
 		esac
@@ -378,7 +382,8 @@ tui_uninstall() {
 	gum spin --spinner dot --title "Uninstalling…" --show-output -- \
 		bash -c 'set -Eeuo pipefail; core_uninstall "$@"' _ "$target_slug"
 
-	STATUS="Uninstalled: $target_name"
+	gum style --foreground 212 --bold "Uninstalled: $target_name"
+	pause_key
 }
 
 tui_help() {
@@ -425,9 +430,20 @@ main_menu() {
 	done
 }
 
-# Use the alternate screen buffer for the session and restore the terminal on
-# exit, so the TUI leaves no trace in the user's scrollback.
-trap 'printf "\033[?1049l"' EXIT
+# Use the alternate screen buffer for the session and disable echo, so stray
+# terminal responses (to gum's capability queries) are not echoed to the screen.
+# Restore the terminal on exit, leaving no trace in the user's scrollback.
+SAVED_STTY=$(stty -g 2>/dev/null || true)
+restore_terminal() {
+	printf '\033[?1049l'
+	if [ -n "$SAVED_STTY" ]; then
+		stty "$SAVED_STTY" 2>/dev/null || true
+	fi
+}
+trap restore_terminal EXIT
+if [ -n "$SAVED_STTY" ]; then
+	stty -echo 2>/dev/null || true
+fi
 printf '\033[?1049h'
 
 main_menu
