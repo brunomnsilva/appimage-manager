@@ -345,11 +345,12 @@ tui_uninstall() {
 		return
 	fi
 
-	local -a slugs=() labels=()
-	local slug name appimage
-	while IFS=$'\t' read -r slug name appimage _ _ _ _; do
+	local -a slugs=() labels=() tracked_flags=()
+	local slug name appimage tracked
+	while IFS=$'\t' read -r slug name appimage _ _ _ tracked; do
 		slugs+=("$slug")
 		labels+=("$name — $(shorten_home "$appimage")")
+		tracked_flags+=("$tracked")
 	done <<<"$rows"
 
 	local choice
@@ -374,8 +375,16 @@ tui_uninstall() {
 
 	local target_slug="${slugs[$idx]}"
 	local target_name="${labels[$idx]}"
+	local target_tracked="${tracked_flags[$idx]}"
 
-	if ! gum confirm "Remove \"$target_name\"?"; then
+	local confirm_text="Remove \"$target_name\"?"
+	if [ "$target_tracked" = "0" ]; then
+		gum style --foreground 3 --bold "This AppImage is untracked (legacy) — it was not installed by appimage-manager."
+		gum style --foreground 3 "Its desktop entry, launcher wrapper, and icon are inferred from the filename and may not be accurate."
+		confirm_text="Remove \"$target_name\" anyway?"
+	fi
+
+	if ! gum confirm "$confirm_text"; then
 		STATUS="Cancelled."
 		return
 	fi
