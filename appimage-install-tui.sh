@@ -23,6 +23,19 @@ export_all
 # prints on cancel.
 clear_prompt_line() { printf '\033[1A\033[2K'; }
 
+# Boxed application title.
+app_title() {
+	gum style \
+		--border double \
+		--border-foreground 212 \
+		--foreground 212 \
+		--bold \
+		--align center \
+		--padding "1 4" \
+		--margin "1 0 1 0" \
+		"appimage-install"
+}
+
 category_value() {
 	case "$1" in
 	Utility) printf 'Utility;' ;;
@@ -342,7 +355,7 @@ tui_uninstall() {
 }
 
 tui_help() {
-	gum style --bold "appimage-install (TUI)"
+	app_title
 	printf '\n'
 	gum format <<'EOF'
 Install, list, and uninstall AppImages into your user environment.
@@ -360,8 +373,9 @@ EOF
 
 main_menu() {
 	while true; do
+		app_title
 		local choice
-		choice=$(gum choose --header "appimage-install" \
+		choice=$(gum choose --header "" \
 			"Install an AppImage" "List installed" "Uninstall" "Help" "Exit" || true)
 		case "${choice:-}" in
 		"Install an AppImage") tui_install ;;
