@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+# appimage-install-tui.sh
+# Interactive (gum-based) frontend for appimage-install.
+
+# ===BUNDLE_CORE_HERE===
+
+if ! declare -F core_install >/dev/null 2>&1; then
+	SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	# shellcheck source=lib/core.sh
+	source "$SCRIPT_DIR/lib/core.sh"
+fi
+
+command_exists gum || die "gum is required for TUI mode. Install it with: sudo pacman -S gum (or: brew install gum / go install github.com/charmbracelet/gum@latest)"
+
+export_all
+
+# --- Presentation helpers ---------------------------------------------------
+
+# Erase the "nothing selected"/"no file selected" line gum prints on cancel.
+clear_prompt_line() { printf '\033[1A\033[2K'; }
+
+category_value() {
+	case "$1" in
+	Utility) printf 'Utility;' ;;
+	Development) printf 'Development;' ;;
+	Office) printf 'Office;' ;;
+	Graphics) printf 'Graphics;' ;;
+	AudioVideo) printf 'AudioVideo;' ;;
+	Network) printf 'Network;' ;;
+	Game) printf 'Game;' ;;
+	Education) printf 'Education;' ;;
+	Science) printf 'Science;' ;;
+	System) printf 'System;' ;;
+	*) printf 'Utility;' ;;
+	esac
+}
+
+exec_args_value() {
+	case "$1" in
+	"--no-sandbox") printf '%s' '--no-sandbox' ;;
+	"--disable-gpu") printf '%s' '--disable-gpu' ;;
+	"--disable-dev-shm-usage") printf '%s' '--disable-dev-shm-usage' ;;
+	"Wayland (auto)") printf '%s' '--ozone-platform-hint=auto' ;;
+	"Wayland (native)") printf '%s' '--enable-features=UseOzonePlatform,WaylandWindowDecorations --ozone-platform-hint=auto' ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
+# --- Wizard ---------------------------------------------------------------
+
+tui_install() {
+	local start_dir="$HOME/Downloads"
+	[ -d "$start_dir" ] || start_dir="$HOME"
+
+	gum style --bold "Install an AppImage"
+
+	# Collect candidate AppImages (recursively) from ~/Downloads.
+	local -a files=()
+	local f
+	while IFS= read -r f; do
+		files+=("$f")
+	done < <(find "$start_dir" -type f -iname '*.AppImage' 2>/dev/null | sort)
+
+	local appimage=""
+	while [ -z "$appimage" ]; do
+		local -a labels=()
+		local p
+		for p in "${files[@]}"; do
+			labels+=("$(basename "$p")")
+		done
+
+		local choice
+		if [ "${#labels[@]}" -gt 0 ]; then
+			choice=$(gum choose --header "Select an AppImage" -- "${labels[@]}" "Browse files…" || true)
+		else
+			gum style --foreground 240 "No .AppImage files found in $start_dir"
+			choice="Browse files…"
+		fi
+
+		if [ -z "$choice" ]; then
+			clear_prompt_line
+			gum style --foreground 240 "Cancelled."
+			return
+		fi
+
+		if [ "$choice" = "Browse files…" ]; then
+			appimage=$(gum file --file --height 15 "$start_dir" || true)
+			if [ -z "$appimage" ]; then
+				clear_prompt_line
+				continue
+			fi
+		else
+			local i
+			for i in "${!labels[@]}"; do
+				if [ "${labels[$i]}" = "$choice" ]; then
+					appimage="${files[$i]}"
+					break
+				fi
+			done
+			[ -n "$appimage" ] || continue
+		fi
+
+		if ! is_appimage "$appimage"; then
+			gum style --foreground 1 "Not a valid AppImage: $appimage"
+			appimage=""
+			if ! gum confirm "Try again?"; then
+				gum style --foreground 240 "Cancelled."
+				return
+			fi
+		fi
+	done
+
+	local abs_appimage base
+	abs_appimage=$(abs_path "$appimage")
+	base=$(basename "$abs_appimage")
+	base=${base%.*}
+
+	local name
+	name=$(gum input --header "App name" --placeholder "App name" --value "$base")
+	[ -n "$name" ] || {
+		gum style --foreground 1 "Name cannot be empty."
+		return
+	}
+
+	local comment
+	comment=$(gum input --header "Comment" --placeholder "Comment (optional)")
+
+	local cat_choice categories
+	cat_choice=$(gum choose --header "Category" \
+		"Utility" "Development" "Office" "Graphics" "AudioVideo" \
+		"Network" "Game" "Education" "Science" "System" "Custom…" || true)
+	case "${cat_choice:-}" in
+	"Custom…")
+		categories=$(gum input --header "Categories" --placeholder "Categories" --value "Utility;")
+		[ -n "$categories" ] || categories="Utility;"
+		;;
+	"") categories="Utility;" ;;
+	*) categories=$(category_value "$cat_choice") ;;
+	esac
+
+	local -a selected_args=()
+	local exec_args="" a has_none=false has_custom=false
+	local args_choice
+	# The preset values start with "--", so a "--" terminator is required to
+	# stop gum (kong) from parsing them as flags.
+	args_choice=$(gum choose --no-limit --height 12 --header "Extra launch args (optional)" -- \
+		"None (no extra args)" \
+		"--no-sandbox" \
+		"--disable-gpu" \
+		"--disable-dev-shm-usage" \
+		"Wayland (auto)" \
+		"Wayland (native)" \
+		"Custom…" || true)
+	if [ -n "$args_choice" ]; then
+		while IFS= read -r a; do
+			case "$a" in
+			"None (no extra args)") has_none=true ;;
+			"Custom…") has_custom=true ;;
+			"--no-sandbox" | "--disable-gpu" | "--disable-dev-shm-usage" | "Wayland (auto)" | "Wayland (native)")
+				selected_args+=("$(exec_args_value "$a")")
+				;;
+			*) : ;; # ignore any unexpected output (defensive)
+			esac
+		done <<<"$args_choice"
+		if [ "$has_custom" = true ]; then
+			local custom_args
+			custom_args=$(gum input --header "Extra args" --placeholder "e.g. --no-sandbox --disable-gpu")
+			[ -n "$custom_args" ] && selected_args+=("$custom_args")
+		fi
+		if [ "$has_none" = false ]; then
+			exec_args=$(printf '%s ' "${selected_args[@]}")
+			exec_args=${exec_args% }
+		fi
+	fi
+
+	local icon="" icon_choice
+	icon_choice=$(gum choose --header "Icon" \
+		"Auto-extract (recommended)" "Provide custom icon" || true)
+	if [ "$icon_choice" = "Provide custom icon" ]; then
+		icon=$(gum file --file --height 15 "$HOME" || true)
+		[ -n "$icon" ] || icon=""
+	fi
+
+	local force=false dest
+	dest="$HOME/Applications/${name}.AppImage"
+	if [ -e "$dest" ]; then
+		if gum confirm "An install named \"$name\" already exists. Overwrite it?"; then
+			force=true
+		else
+			gum style --foreground 240 "Cancelled."
+			return
+		fi
+	fi
+
+	{
+		printf 'AppImage:   %s\n' "$appimage"
+		printf 'Name:       %s\n' "$name"
+		printf 'Categories: %s\n' "$categories"
+		printf 'Exec args:  %s\n' "${exec_args:-<none>}"
+		printf 'Icon:       %s\n' "${icon:-<auto>}"
+		printf 'Overwrite:  %s\n' "$force"
+	} | gum style --border rounded --padding "1 2"
+
+	if ! gum confirm "Proceed with installation?"; then
+		gum style --foreground 240 "Cancelled."
+		return
+	fi
+
+	local -a args=(--appimage "$appimage" --name "$name" --categories "$categories" --comment "$comment" --exec-args "$exec_args")
+	[ -n "$icon" ] && args+=(--icon "$icon")
+	[ "$force" = true ] && args+=(--force)
+
+	gum spin --spinner dot --title "Installing $name…" --show-output -- \
+		bash -c 'set -Eeuo pipefail; core_install "$@"' _ "${args[@]}"
+
+	gum style --foreground 212 --bold "Installed: $name"
+}
+
+tui_list() {
+	local rows
+	rows=$(core_list)
+
+	if [ -z "$rows" ]; then
+		gum style --foreground 240 "No apps installed."
+		return
+	fi
+
+	local name appimage tracked
+	{
+		while IFS=$'\t' read -r _ name appimage _ _ _ tracked; do
+			local status="tracked"
+			[ "$tracked" = "0" ] && status="legacy"
+			printf '%s\t%s\t%s\n' "$name" "$appimage" "$status"
+		done <<<"$rows"
+	} | gum table --print --separator $'\t' --columns "Name,Path,Status" --widths 30,45,10
+}
+
+tui_uninstall() {
+	local rows
+	rows=$(core_list)
+
+	if [ -z "$rows" ]; then
+		gum style --foreground 240 "No apps installed."
+		return
+	fi
+
+	local -a slugs=() labels=()
+	local slug name appimage
+	while IFS=$'\t' read -r slug name appimage _ _ _ _; do
+		slugs+=("$slug")
+		labels+=("$name — $appimage")
+	done <<<"$rows"
+
+	local choice
+	choice=$(gum choose --header "Select an app to uninstall" -- "${labels[@]}" || true)
+	[ -n "$choice" ] || {
+		clear_prompt_line
+		gum style --foreground 240 "Cancelled."
+		return
+	}
+
+	local idx=-1 i
+	for i in "${!labels[@]}"; do
+		if [ "${labels[$i]}" = "$choice" ]; then
+			idx="$i"
+			break
+		fi
+	done
+	[ "$idx" -ge 0 ] || {
+		gum style --foreground 1 "Selection not found."
+		return
+	}
+
+	local target_slug="${slugs[$idx]}"
+	local target_name="${labels[$idx]}"
+
+	if ! gum confirm "Remove \"$target_name\"?"; then
+		gum style --foreground 240 "Cancelled."
+		return
+	fi
+
+	gum spin --spinner dot --title "Uninstalling…" --show-output -- \
+		bash -c 'set -Eeuo pipefail; core_uninstall "$@"' _ "$target_slug"
+
+	gum style --foreground 212 --bold "Uninstalled: $target_name"
+}
+
+tui_help() {
+	gum style --bold "appimage-install (TUI)"
+	printf '\n'
+	gum format <<'EOF'
+Install, list, and uninstall AppImages into your user environment.
+
+- **Install** — pick an AppImage and configure name, categories, icon, and launch flags.
+- **List** — show what is currently installed.
+- **Uninstall** — remove an installed AppImage and its launcher.
+
+All changes stay under your home directory (no root required).
+EOF
+	printf '\n'
+}
+
+# --- Entry -------------------------------------------------------------------
+
+main_menu() {
+	while true; do
+		local choice
+		choice=$(gum choose --header "appimage-install" \
+			"Install an AppImage" "List installed" "Uninstall" "Help" "Exit" || true)
+		case "${choice:-}" in
+		"Install an AppImage") tui_install ;;
+		"List installed") tui_list ;;
+		"Uninstall") tui_uninstall ;;
+		"Help") tui_help ;;
+		"Exit" | "") break ;;
+		esac
+	done
+}
+
+main_menu
