@@ -353,7 +353,7 @@ tui_uninstall() {
 	done <<<"$rows"
 
 	local choice
-	choice=$(gum choose --header "" -- "${labels[@]}" || true)
+	choice=$(gum choose --header "Select an AppImage to uninstall" -- "${labels[@]}" || true)
 	[ -n "$choice" ] || {
 		STATUS="Cancelled."
 		return
