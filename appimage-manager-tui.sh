@@ -48,7 +48,7 @@ app_title() {
 STATUS=""
 show_status() {
 	if [ -n "$STATUS" ]; then
-		gum style --foreground 212 --bold "$STATUS"
+		gum style --foreground 240 "$STATUS"
 		STATUS=""
 	fi
 }
@@ -298,7 +298,7 @@ tui_install() {
 			gum spin --spinner dot --title "Installing $name…" --show-output -- \
 				bash -c 'set -Eeuo pipefail; core_install "$@"' _ "${args[@]}"
 
-			gum style --foreground 212 --bold "Installed: $name"
+			gum style --foreground 2 --bold "Installed: $name"
 			pause_key
 			step="done"
 			;;
@@ -392,7 +392,7 @@ tui_uninstall() {
 	gum spin --spinner dot --title "Uninstalling…" --show-output -- \
 		bash -c 'set -Eeuo pipefail; core_uninstall "$@"' _ "$target_slug"
 
-	gum style --foreground 212 --bold "Uninstalled: $target_name"
+	gum style --foreground 2 --bold "Uninstalled: $target_name"
 	pause_key
 }
 
