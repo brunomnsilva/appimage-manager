@@ -19,9 +19,8 @@ export_all
 
 # --- Presentation helpers ---------------------------------------------------
 
-# Erase the "nothing selected"/"not submitted"/"no file selected" line gum
-# prints on cancel.
-clear_prompt_line() { printf '\033[1A\033[2K'; }
+# Clear the screen and move the cursor home.
+clear_screen() { printf '\033[2J\033[H'; }
 
 # Boxed application title.
 app_title() {
@@ -34,6 +33,22 @@ app_title() {
 		--padding "1 4" \
 		--margin "1 0 1 0" \
 		"appimage-install"
+}
+
+# Transient outcome message shown at the top of the main menu.
+STATUS=""
+show_status() {
+	if [ -n "$STATUS" ]; then
+		gum style --foreground 212 --bold "$STATUS"
+		STATUS=""
+	fi
+}
+
+# Wait for the user so they can read the screen before it is cleared.
+pause_key() {
+	printf '\n'
+	gum style --foreground 240 "Press Enter to continue"
+	read -rs _ || true
 }
 
 category_value() {
@@ -66,12 +81,11 @@ exec_args_value() {
 # --- Wizard ---------------------------------------------------------------
 
 # Esc backs one level: top step returns to the menu, other steps re-render the
-# previous one. Enter accepts the current value/default and advances.
+# previous one. Enter accepts the current value/default and advances. Each step
+# starts from a cleared screen.
 tui_install() {
 	local start_dir="$HOME/Downloads"
 	[ -d "$start_dir" ] || start_dir="$HOME"
-
-	gum style --bold "Install an AppImage"
 
 	# Collect candidate AppImages (recursively) from ~/Downloads.
 	local -a files=()
@@ -84,6 +98,10 @@ tui_install() {
 	local base="" force=false step="appimage"
 
 	while [ "$step" != "done" ]; do
+		clear_screen
+		app_title
+		printf '\n'
+
 		case "$step" in
 		appimage)
 			local -a labels=()
@@ -95,20 +113,17 @@ tui_install() {
 			if [ "${#labels[@]}" -eq 0 ]; then
 				gum style --foreground 240 "No .AppImage files found in $start_dir"
 				if ! appimage=$(gum file --file --height 15 "$start_dir"); then
-					clear_prompt_line
-					gum style --foreground 240 "Cancelled."
+					STATUS="Cancelled."
 					return
 				fi
 			else
 				local choice
 				if ! choice=$(gum choose --header "Select an AppImage" -- "${labels[@]}" "Browse files…"); then
-					clear_prompt_line
-					gum style --foreground 240 "Cancelled."
+					STATUS="Cancelled."
 					return
 				fi
 				if [ "$choice" = "Browse files…" ]; then
 					if ! appimage=$(gum file --file --height 15 "$start_dir"); then
-						clear_prompt_line
 						continue
 					fi
 				else
@@ -127,7 +142,7 @@ tui_install() {
 				gum style --foreground 1 "Not a valid AppImage: $appimage"
 				appimage=""
 				if ! gum confirm "Try again?"; then
-					gum style --foreground 240 "Cancelled."
+					STATUS="Cancelled."
 					return
 				fi
 				continue
@@ -140,12 +155,12 @@ tui_install() {
 
 		name)
 			if ! name=$(gum input --header "App name" --placeholder "App name" --value "$base"); then
-				clear_prompt_line
 				step="appimage"
 				continue
 			fi
 			if [ -z "$name" ]; then
 				gum style --foreground 1 "Name cannot be empty."
+				pause_key
 				continue
 			fi
 			step="comment"
@@ -153,7 +168,6 @@ tui_install() {
 
 		comment)
 			if ! comment=$(gum input --header "Comment" --placeholder "Comment (optional)"); then
-				clear_prompt_line
 				step="name"
 				continue
 			fi
@@ -165,13 +179,11 @@ tui_install() {
 			if ! cat_choice=$(gum choose --header "Category" \
 				"Utility" "Development" "Office" "Graphics" "AudioVideo" \
 				"Network" "Game" "Education" "Science" "System" "Custom…"); then
-				clear_prompt_line
 				step="comment"
 				continue
 			fi
 			if [ "$cat_choice" = "Custom…" ]; then
 				if ! categories=$(gum input --header "Categories" --placeholder "Categories" --value "Utility;"); then
-					clear_prompt_line
 					continue
 				fi
 				[ -n "$categories" ] || categories="Utility;"
@@ -194,7 +206,6 @@ tui_install() {
 				"Wayland (auto)" \
 				"Wayland (native)" \
 				"Custom…"); then
-				clear_prompt_line
 				step="category"
 				continue
 			fi
@@ -213,7 +224,6 @@ tui_install() {
 				if [ "$has_custom" = true ]; then
 					local custom_args
 					if ! custom_args=$(gum input --header "Extra args" --placeholder "e.g. --no-sandbox --disable-gpu"); then
-						clear_prompt_line
 						continue
 					fi
 					[ -n "$custom_args" ] && selected_args+=("$custom_args")
@@ -230,14 +240,12 @@ tui_install() {
 			local icon_choice
 			if ! icon_choice=$(gum choose --header "Icon" \
 				"Auto-extract (recommended)" "Provide custom icon"); then
-				clear_prompt_line
 				step="args"
 				continue
 			fi
 			icon=""
 			if [ "$icon_choice" = "Provide custom icon" ]; then
 				if ! icon=$(gum file --file --height 15 "$HOME"); then
-					clear_prompt_line
 					continue
 				fi
 			fi
@@ -249,7 +257,7 @@ tui_install() {
 			dest="$HOME/Applications/${name}.AppImage"
 			if [ -e "$dest" ]; then
 				if ! gum confirm "An install named \"$name\" already exists. Overwrite it?"; then
-					gum style --foreground 240 "Cancelled."
+					STATUS="Cancelled."
 					return
 				fi
 				force=true
@@ -267,7 +275,7 @@ tui_install() {
 			} | gum style --border rounded --padding "1 2"
 
 			if ! gum confirm "Proceed with installation?"; then
-				gum style --foreground 240 "Cancelled."
+				STATUS="Cancelled."
 				return
 			fi
 
@@ -278,7 +286,7 @@ tui_install() {
 			gum spin --spinner dot --title "Installing $name…" --show-output -- \
 				bash -c 'set -Eeuo pipefail; core_install "$@"' _ "${args[@]}"
 
-			gum style --foreground 212 --bold "Installed: $name"
+			STATUS="Installed: $name"
 			step="done"
 			;;
 		esac
@@ -286,11 +294,16 @@ tui_install() {
 }
 
 tui_list() {
+	clear_screen
+	app_title
+	printf '\n'
+
 	local rows
 	rows=$(core_list)
 
 	if [ -z "$rows" ]; then
 		gum style --foreground 240 "No apps installed."
+		pause_key
 		return
 	fi
 
@@ -302,14 +315,20 @@ tui_list() {
 			printf '%s\t%s\t%s\n' "$name" "$appimage" "$status"
 		done <<<"$rows"
 	} | gum table --print --separator $'\t' --columns "Name,Path,Status" --widths 30,45,10
+	pause_key
 }
 
 tui_uninstall() {
+	clear_screen
+	app_title
+	printf '\n'
+
 	local rows
 	rows=$(core_list)
 
 	if [ -z "$rows" ]; then
 		gum style --foreground 240 "No apps installed."
+		pause_key
 		return
 	fi
 
@@ -321,10 +340,9 @@ tui_uninstall() {
 	done <<<"$rows"
 
 	local choice
-	choice=$(gum choose --header "Select an app to uninstall" -- "${labels[@]}" || true)
+	choice=$(gum choose --header "" -- "${labels[@]}" || true)
 	[ -n "$choice" ] || {
-		clear_prompt_line
-		gum style --foreground 240 "Cancelled."
+		STATUS="Cancelled."
 		return
 	}
 
@@ -337,6 +355,7 @@ tui_uninstall() {
 	done
 	[ "$idx" -ge 0 ] || {
 		gum style --foreground 1 "Selection not found."
+		pause_key
 		return
 	}
 
@@ -344,17 +363,18 @@ tui_uninstall() {
 	local target_name="${labels[$idx]}"
 
 	if ! gum confirm "Remove \"$target_name\"?"; then
-		gum style --foreground 240 "Cancelled."
+		STATUS="Cancelled."
 		return
 	fi
 
 	gum spin --spinner dot --title "Uninstalling…" --show-output -- \
 		bash -c 'set -Eeuo pipefail; core_uninstall "$@"' _ "$target_slug"
 
-	gum style --foreground 212 --bold "Uninstalled: $target_name"
+	STATUS="Uninstalled: $target_name"
 }
 
 tui_help() {
+	clear_screen
 	app_title
 	printf '\n'
 	gum format <<'EOF'
@@ -366,14 +386,17 @@ Install, list, and uninstall AppImages into your user environment.
 
 All changes stay under your home directory (no root required).
 EOF
-	printf '\n'
+	pause_key
 }
 
 # --- Entry -------------------------------------------------------------------
 
 main_menu() {
+	STATUS=""
 	while true; do
+		clear_screen
 		app_title
+		show_status
 		local choice
 		choice=$(gum choose --header "" \
 			"Install an AppImage" "List installed" "Uninstall" "Help" "Exit" || true)
@@ -386,5 +409,10 @@ main_menu() {
 		esac
 	done
 }
+
+# Use the alternate screen buffer for the session and restore the terminal on
+# exit, so the TUI leaves no trace in the user's scrollback.
+trap 'printf "\033[?1049l"' EXIT
+printf '\033[?1049h'
 
 main_menu
