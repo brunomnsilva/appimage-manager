@@ -17,6 +17,16 @@ command_exists gum || die "gum is required for TUI mode. Install it with: sudo p
 
 export_all
 
+# --- Palette ----------------------------------------------------------------
+# Semantic accents as ANSI base colors (0-15), so the terminal theme defines
+# the actual hue. Normal text uses the terminal default (no color); the app
+# never sets backgrounds.
+COLOR_SECONDARY=8 # muted: cancel/status, hints, empty states
+COLOR_ACCENT=6    # primary accent: application title
+COLOR_SUCCESS=2
+COLOR_WARNING=3
+COLOR_ERROR=1
+
 # --- Presentation helpers ---------------------------------------------------
 
 # Clear the screen and move the cursor home.
@@ -36,8 +46,8 @@ app_title() {
 		gum format --type emoji |
 		gum style \
 			--border double \
-			--border-foreground 212 \
-			--foreground 212 \
+			--border-foreground "$COLOR_ACCENT" \
+			--foreground "$COLOR_ACCENT" \
 			--bold \
 			--align center \
 			--padding "1 4" \
@@ -48,7 +58,7 @@ app_title() {
 STATUS=""
 show_status() {
 	if [ -n "$STATUS" ]; then
-		gum style --foreground 240 "$STATUS"
+		gum style --foreground "$COLOR_SECONDARY" "$STATUS"
 		STATUS=""
 	fi
 }
@@ -56,7 +66,7 @@ show_status() {
 # Wait for the user so they can read the screen before it is cleared.
 pause_key() {
 	printf '\n'
-	gum style --foreground 240 "Press Enter to continue"
+	gum style --foreground "$COLOR_SECONDARY" "Press Enter to continue"
 	read -rs _ || true
 }
 
@@ -120,7 +130,7 @@ tui_install() {
 			done
 
 			if [ "${#labels[@]}" -eq 0 ]; then
-				gum style --foreground 240 "No .AppImage files found in $start_dir"
+				gum style --foreground "$COLOR_SECONDARY" "No .AppImage files found in $start_dir"
 				if ! appimage=$(gum file --file --height 15 "$start_dir"); then
 					STATUS="Cancelled."
 					return
@@ -148,7 +158,7 @@ tui_install() {
 			fi
 
 			if ! is_appimage "$appimage"; then
-				gum style --foreground 1 "Not a valid AppImage: $appimage"
+				gum style --foreground "$COLOR_ERROR" "Not a valid AppImage: $appimage"
 				appimage=""
 				if ! gum confirm "Try again?"; then
 					STATUS="Cancelled."
@@ -168,7 +178,7 @@ tui_install() {
 				continue
 			fi
 			if [ -z "$name" ]; then
-				gum style --foreground 1 "Name cannot be empty."
+				gum style --foreground "$COLOR_ERROR" "Name cannot be empty."
 				pause_key
 				continue
 			fi
@@ -298,7 +308,7 @@ tui_install() {
 			gum spin --spinner dot --title "Installing $name…" --show-output -- \
 				bash -c 'set -Eeuo pipefail; core_install "$@"' _ "${args[@]}"
 
-			gum style --foreground 2 --bold "Installed: $name"
+			gum style --foreground "$COLOR_SUCCESS" --bold "Installed: $name"
 			pause_key
 			step="done"
 			;;
@@ -315,7 +325,7 @@ tui_list() {
 	rows=$(core_list)
 
 	if [ -z "$rows" ]; then
-		gum style --foreground 240 "No apps installed."
+		gum style --foreground "$COLOR_SECONDARY" "No apps installed."
 		pause_key
 		return
 	fi
@@ -340,7 +350,7 @@ tui_uninstall() {
 	rows=$(core_list)
 
 	if [ -z "$rows" ]; then
-		gum style --foreground 240 "No apps installed."
+		gum style --foreground "$COLOR_SECONDARY" "No apps installed."
 		pause_key
 		return
 	fi
@@ -368,7 +378,7 @@ tui_uninstall() {
 		fi
 	done
 	[ "$idx" -ge 0 ] || {
-		gum style --foreground 1 "Selection not found."
+		gum style --foreground "$COLOR_ERROR" "Selection not found."
 		pause_key
 		return
 	}
@@ -379,8 +389,8 @@ tui_uninstall() {
 
 	local confirm_text="Remove \"$target_name\"?"
 	if [ "$target_tracked" = "0" ]; then
-		gum style --foreground 3 --bold "This AppImage is untracked (legacy) — it was not installed by appimage-manager."
-		gum style --foreground 3 "Its desktop entry, launcher wrapper, and icon are inferred from the filename and may not be accurate."
+		gum style --foreground "$COLOR_WARNING" --bold "This AppImage is untracked (legacy) — it was not installed by appimage-manager."
+		gum style --foreground "$COLOR_WARNING" "Its desktop entry, launcher wrapper, and icon are inferred from the filename and may not be accurate."
 		confirm_text="Remove \"$target_name\" anyway?"
 	fi
 
@@ -392,7 +402,7 @@ tui_uninstall() {
 	gum spin --spinner dot --title "Uninstalling…" --show-output -- \
 		bash -c 'set -Eeuo pipefail; core_uninstall "$@"' _ "$target_slug"
 
-	gum style --foreground 2 --bold "Uninstalled: $target_name"
+	gum style --foreground "$COLOR_SUCCESS" --bold "Uninstalled: $target_name"
 	pause_key
 }
 
