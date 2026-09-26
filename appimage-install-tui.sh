@@ -22,6 +22,14 @@ export_all
 # Clear the screen and move the cursor home.
 clear_screen() { printf '\033[2J\033[H'; }
 
+# Replace a leading $HOME with ~ for compact display.
+shorten_home() {
+	case "$1" in
+	"$HOME"/*) printf '~%s' "${1#"$HOME"}" ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
 # Boxed application title.
 app_title() {
 	gum style \
@@ -312,7 +320,7 @@ tui_list() {
 		while IFS=$'\t' read -r _ name appimage _ _ _ tracked; do
 			local status="tracked"
 			[ "$tracked" = "0" ] && status="legacy"
-			printf '%s\t%s\t%s\n' "$name" "$appimage" "$status"
+			printf '%s\t%s\t%s\n' "$name" "$(shorten_home "$appimage")" "$status"
 		done <<<"$rows"
 	} | gum table --print --separator $'\t' --columns "Name,Path,Status" --widths 30,45,10
 	pause_key
@@ -336,7 +344,7 @@ tui_uninstall() {
 	local slug name appimage
 	while IFS=$'\t' read -r slug name appimage _ _ _ _; do
 		slugs+=("$slug")
-		labels+=("$name — $appimage")
+		labels+=("$name — $(shorten_home "$appimage")")
 	done <<<"$rows"
 
 	local choice
