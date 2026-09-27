@@ -1,5 +1,9 @@
 # AppImage Manager
 
+[![CI](https://github.com/brunomnsilva/appimage-manager/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/brunomnsilva/appimage-manager/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/brunomnsilva/appimage-manager)](https://github.com/brunomnsilva/appimage-manager/releases)
+[![License: GPL-3.0](https://img.shields.io/github/license/brunomnsilva/appimage-manager)](LICENSE)
+
 **Manage your AppImages** inside your user environment — no root required. 
 
 > The tool tracks installed AppImages and lets you list, update, and remove them afterwards. See [how it works](#how-it-works). 
