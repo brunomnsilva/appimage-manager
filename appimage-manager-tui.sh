@@ -111,14 +111,23 @@ exec_args_value() {
 # --- Selection helpers -----------------------------------------------------
 
 # Prompt for an AppImage under ~/Downloads (recursively), offering a "Browse
-# files…" escape for files elsewhere. On success prints the chosen path and
+# files…" escape for files elsewhere. On success sets SELECTED_APPIMAGE and
 # returns 0. Esc at the list (or at the empty-state picker) returns 1; Esc in
-# the browse sub-picker re-renders the list (back one level).
+# the browse sub-picker redraws the banner and re-renders the list (back one
+# level), matching the other steps.
 select_appimage() {
 	local start_dir="$HOME/Downloads"
 	[ -d "$start_dir" ] || start_dir="$HOME"
 
+	local first=true picked
 	while true; do
+		if [ "$first" = false ]; then
+			clear_screen
+			app_title
+			printf '\n'
+		fi
+		first=false
+
 		local -a files=() labels=()
 		local f p
 		while IFS= read -r f; do
@@ -127,26 +136,26 @@ select_appimage() {
 		done < <(find "$start_dir" -type f -iname '*.AppImage' 2>/dev/null | sort)
 
 		if [ "${#labels[@]}" -eq 0 ]; then
-			gum style --foreground "$COLOR_SECONDARY" "No .AppImage files found in $start_dir" >&2
-			local picked
-			picked=$(gum file --file --height 15 "$start_dir") || return 1
-			printf '%s' "$picked"
+			gum style --foreground "$COLOR_SECONDARY" "No .AppImage files found in $start_dir"
+			gum style --foreground "$COLOR_SECONDARY" "Select an AppImage file"
+			picked=$(gum file --file --padding="3" --height 15 "$start_dir") || return 1
+			SELECTED_APPIMAGE="$picked"
 			return 0
 		fi
 
 		local choice
 		choice=$(gum choose --header "Select an AppImage" -- "${labels[@]}" "Browse files…") || return 1
 		if [ "$choice" = "Browse files…" ]; then
-			local picked
-			picked=$(gum file --file --height 15 "$start_dir") || continue
-			printf '%s' "$picked"
+			gum style --foreground "$COLOR_SECONDARY" "Select an AppImage file"
+			picked=$(gum file --file --padding="3" --height 15 "$start_dir") || continue
+			SELECTED_APPIMAGE="$picked"
 			return 0
 		fi
 
 		local i
 		for i in "${!labels[@]}"; do
 			if [ "${labels[$i]}" = "$choice" ]; then
-				printf '%s' "${files[$i]}"
+				SELECTED_APPIMAGE="${files[$i]}"
 				return 0
 			fi
 		done
@@ -195,10 +204,11 @@ tui_install() {
 
 		case "$step" in
 		appimage)
-			if ! appimage=$(select_appimage); then
+			if ! select_appimage; then
 				STATUS="Cancelled."
 				return
 			fi
+			appimage="$SELECTED_APPIMAGE"
 
 			skip_validation=false
 			if ! is_appimage "$appimage"; then
@@ -309,7 +319,8 @@ tui_install() {
 			fi
 			icon=""
 			if [ "$icon_choice" = "Provide custom icon" ]; then
-				if ! icon=$(gum file --file --height 15 "$HOME"); then
+				gum style --foreground "$COLOR_SECONDARY" "Select an icon file (.png or .svg)"
+				if ! icon=$(gum file --file --padding="3" --height 15 "$HOME"); then
 					continue
 				fi
 			fi
@@ -448,10 +459,11 @@ tui_update() {
 	IFS=$'\t' read -r target_slug target_name _ <<<"$selection"
 
 	local new_appimage skip_validation=false
-	if ! new_appimage=$(select_appimage); then
+	if ! select_appimage; then
 		STATUS="Cancelled."
 		return
 	fi
+	new_appimage="$SELECTED_APPIMAGE"
 	if ! is_appimage "$new_appimage"; then
 		gum style --foreground "$COLOR_WARNING" --bold "Not a valid AppImage: $new_appimage"
 		gum style --foreground "$COLOR_WARNING" \
@@ -463,21 +475,25 @@ tui_update() {
 		skip_validation=true
 	fi
 
-	clear_screen
-	app_title
-	printf '\n'
 	local icon_choice icon=""
-	if ! icon_choice=$(gum choose --header "Icon" \
-		"Keep existing icon" "Provide custom icon"); then
-		STATUS="Cancelled."
-		return
-	fi
-	if [ "$icon_choice" = "Provide custom icon" ]; then
-		if ! icon=$(gum file --file --height 15 "$HOME"); then
+	while true; do
+		clear_screen
+		app_title
+		printf '\n'
+		if ! icon_choice=$(gum choose --header "Icon" \
+			"Keep existing icon" "Provide custom icon"); then
 			STATUS="Cancelled."
 			return
 		fi
-	fi
+		if [ "$icon_choice" != "Provide custom icon" ]; then
+			break
+		fi
+		# Esc in the file chooser returns to the icon chooser (back one level).
+		gum style --foreground "$COLOR_SECONDARY" "Select an icon file (.png or .svg)"
+		if icon=$(gum file --file --padding="3" --height 15 "$HOME"); then
+			break
+		fi
+	done
 
 	clear_screen
 	app_title
