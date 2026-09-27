@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Set up shfmt
+        uses: mfinelli/setup-shfmt@v3
+
+      - name: Lint, format check, bundle, and test
+        run: make test
+
+      - name: Upload distributables
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage-manager-dist
+          path: dist/

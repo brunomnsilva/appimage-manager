@@ -181,14 +181,24 @@ dist/appimage-manager.sh
 dist/appimage-manager-tui.sh
 ```
 
+This is automated in CI (`.github/workflows/`): every push and pull request
+runs the tests and uploads `dist/` as a workflow artifact, and pushing a `v*`
+tag runs the same gates, writes `dist/SHA256SUMS`, and publishes both bundled
+scripts as release assets:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
 You can find the latest built files in *Releases*.
 
 ## Testing
 
 ```bash
-make test   # shellcheck + build + functional tests
+make test   # shellcheck + shfmt check + build + functional tests
 make lint   # shellcheck only
-make fmt    # shfmt
+make fmt    # shfmt (rewrite)
 make clean  # remove dist/
 ```
 
