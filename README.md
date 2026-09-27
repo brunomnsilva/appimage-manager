@@ -191,6 +191,15 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
+A release can be re-run without moving the tag, either from the Actions UI
+(**Release → Run workflow**) or with:
+
+```bash
+gh workflow run release.yml -f tag=v1.0.0
+```
+
+Re-running rebuilds the assets and updates the existing release in place.
+
 You can find the latest built files in *Releases*.
 
 ## Testing
