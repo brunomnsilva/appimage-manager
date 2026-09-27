@@ -111,11 +111,20 @@ exec_args_value() {
 # --- Selection helpers -----------------------------------------------------
 
 # Prompt for an AppImage under ~/Downloads (recursively), offering a "Browse
-# files…" escape for files elsewhere. On success sets SELECTED_APPIMAGE and
-# returns 0. Esc at the list (or at the empty-state picker) returns 1; Esc in
-# the browse sub-picker redraws the banner and re-renders the list (back one
-# level), matching the other steps.
+# files…" escape for files elsewhere. The optional argument names the target
+# (e.g. when updating). On success sets SELECTED_APPIMAGE and returns 0. Esc at
+# the list (or at the empty-state picker) returns 1; Esc in the browse
+# sub-picker redraws the banner and re-renders the list (back one level),
+# matching the other steps.
 select_appimage() {
+	local target="${1:-}"
+	local file_prompt="Select an AppImage file"
+	local list_header="Select an AppImage"
+	if [ -n "$target" ]; then
+		file_prompt="Select a new AppImage for $target"
+		list_header="$file_prompt"
+	fi
+
 	local start_dir="$HOME/Downloads"
 	[ -d "$start_dir" ] || start_dir="$HOME"
 
@@ -137,16 +146,16 @@ select_appimage() {
 
 		if [ "${#labels[@]}" -eq 0 ]; then
 			gum style --foreground "$COLOR_SECONDARY" "No .AppImage files found in $start_dir"
-			gum style --foreground "$COLOR_SECONDARY" "Select an AppImage file"
+			gum style --foreground "$COLOR_SECONDARY" "$file_prompt"
 			picked=$(gum file --file --padding="3" --height 15 "$start_dir") || return 1
 			SELECTED_APPIMAGE="$picked"
 			return 0
 		fi
 
 		local choice
-		choice=$(gum choose --header "Select an AppImage" -- "${labels[@]}" "Browse files…") || return 1
+		choice=$(gum choose --header "$list_header" -- "${labels[@]}" "Browse files…") || return 1
 		if [ "$choice" = "Browse files…" ]; then
-			gum style --foreground "$COLOR_SECONDARY" "Select an AppImage file"
+			gum style --foreground "$COLOR_SECONDARY" "$file_prompt"
 			picked=$(gum file --file --padding="3" --height 15 "$start_dir") || continue
 			SELECTED_APPIMAGE="$picked"
 			return 0
@@ -163,15 +172,16 @@ select_appimage() {
 }
 
 # Prompt for one of the installed apps. On success prints
-# "slug<TAB>label<TAB>tracked" and returns 0; returns 1 on cancel.
+# "slug<TAB>label<TAB>tracked<TAB>name" and returns 0; returns 1 on cancel.
 select_installed_app() {
 	local header="$1"
-	local -a slugs=() labels=() tracked_flags=()
+	local -a slugs=() labels=() tracked_flags=() names=()
 	local slug name appimage tracked
 	while IFS=$'\t' read -r slug name appimage _ _ _ tracked; do
 		slugs+=("$slug")
 		labels+=("$name — $(shorten_home "$appimage")")
 		tracked_flags+=("$tracked")
+		names+=("$name")
 	done < <(core_list)
 
 	local choice
@@ -181,7 +191,7 @@ select_installed_app() {
 	local i
 	for i in "${!labels[@]}"; do
 		if [ "${labels[$i]}" = "$choice" ]; then
-			printf '%s\t%s\t%s' "${slugs[$i]}" "${labels[$i]}" "${tracked_flags[$i]}"
+			printf '%s\t%s\t%s\t%s' "${slugs[$i]}" "${labels[$i]}" "${tracked_flags[$i]}" "${names[$i]}"
 			return 0
 		fi
 	done
@@ -417,7 +427,7 @@ tui_uninstall() {
 		STATUS="Cancelled."
 		return
 	}
-	IFS=$'\t' read -r target_slug target_name target_tracked <<<"$selection"
+	IFS=$'\t' read -r target_slug target_name target_tracked _ <<<"$selection"
 
 	local confirm_text="Remove \"$target_name\"?"
 	if [ "$target_tracked" = "0" ]; then
@@ -451,15 +461,15 @@ tui_update() {
 		return
 	fi
 
-	local selection target_slug target_name
+	local selection target_slug target_name target_app_name
 	selection=$(select_installed_app "Select an AppImage to update") || {
 		STATUS="Cancelled."
 		return
 	}
-	IFS=$'\t' read -r target_slug target_name _ <<<"$selection"
+	IFS=$'\t' read -r target_slug target_name _ target_app_name <<<"$selection"
 
 	local new_appimage skip_validation=false
-	if ! select_appimage; then
+	if ! select_appimage "$target_app_name"; then
 		STATUS="Cancelled."
 		return
 	fi
