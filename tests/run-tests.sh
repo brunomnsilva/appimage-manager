@@ -296,6 +296,66 @@ else
 	ok "CLI --update rejects install options"
 fi
 
+# --- --skip-validation (non-AppImage binaries) ------------------------------
+
+plain="$FIX/PlainBinary.bin"
+marker="$FIX/executed.marker"
+printf '#!/usr/bin/env bash\ntouch %s\nexit 0\n' "$marker" >"$plain"
+chmod +x "$plain"
+
+if (
+	unset APPIMAGE_MANAGER_SKIP_VALIDATE
+	core_install --appimage "$plain" --name "Plain App" --skip-validation --force >/dev/null 2>&1
+); then
+	ok "core_install --skip-validation installs non-AppImage"
+else
+	bad "core_install --skip-validation installs non-AppImage"
+fi
+assert_file "$HOME/Applications/Plain App.AppImage" "skip-validation copies the file"
+assert_nofile "$marker" "skip-validation does not execute the binary"
+assert_grep '^Icon=.*Plain App.AppImage$' "$HOME/.local/share/applications/plain-app.desktop" "skip-validation icon falls back to app path"
+
+plain2="$FIX/PlainBinary-2.bin"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$plain2"
+if (
+	unset APPIMAGE_MANAGER_SKIP_VALIDATE
+	core_update --target "Plain App" --appimage "$plain2" --skip-validation >/dev/null 2>&1
+); then
+	ok "core_update --skip-validation succeeds"
+else
+	bad "core_update --skip-validation succeeds"
+fi
+
+if (
+	unset APPIMAGE_MANAGER_SKIP_VALIDATE
+	core_update --target "Plain App" --appimage "$plain2" >/dev/null 2>&1
+); then
+	bad "core_update rejects non-AppImage without --skip-validation"
+else
+	ok "core_update rejects non-AppImage without --skip-validation"
+fi
+
+cli_plain="$FIX/CLIPlain.bin"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$cli_plain"
+if (
+	unset APPIMAGE_MANAGER_SKIP_VALIDATE
+	bash "$ROOT/appimage-manager.sh" --skip-validation --name "CLI Plain" "$cli_plain" >/dev/null 2>&1
+); then
+	ok "CLI --skip-validation installs non-AppImage"
+else
+	bad "CLI --skip-validation installs non-AppImage"
+fi
+assert_file "$HOME/Applications/CLI Plain.AppImage" "CLI --skip-validation copies the file"
+
+if (
+	unset APPIMAGE_MANAGER_SKIP_VALIDATE
+	bash "$ROOT/appimage-manager.sh" --name "Reject" "$cli_plain" >/dev/null 2>&1
+); then
+	bad "CLI rejects non-AppImage without --skip-validation"
+else
+	ok "CLI rejects non-AppImage without --skip-validation"
+fi
+
 # --- Summary ---------------------------------------------------------------
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

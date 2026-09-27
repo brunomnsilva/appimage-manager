@@ -152,7 +152,7 @@ get_registry_file() { printf '%s/appimage-manager/registry.tsv' "$(get_data_dir)
 # --- Core operations --------------------------------------------------------
 
 core_install() {
-	local appimage_path="" name="" categories="Utility;" comment="" custom_icon="" exec_args="" force=false
+	local appimage_path="" name="" categories="Utility;" comment="" custom_icon="" exec_args="" force=false skip_validation=false
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -191,14 +191,18 @@ core_install() {
 			force=true
 			shift
 			;;
+		--skip-validation)
+			skip_validation=true
+			shift
+			;;
 		*) die "core_install: unknown option: $1" ;;
 		esac
 	done
 
 	[ -n "$appimage_path" ] || die "Missing AppImage path"
 	[ -f "$appimage_path" ] || die "File not found: $appimage_path"
-	if ! is_appimage "$appimage_path"; then
-		die "Not a valid AppImage: $appimage_path"
+	if [ "$skip_validation" = false ] && ! is_appimage "$appimage_path"; then
+		die "Not a valid AppImage: $appimage_path (use --skip-validation to install anyway)"
 	fi
 
 	# Make sure it's executable; some downloads are not +x
@@ -256,11 +260,11 @@ core_install() {
 		log "Copying provided icon to: $icon_target"
 		copy_file "$custom_icon" "$icon_target"
 	else
-		if try_extract_icon_from_appimage "$abs_appimage" "$app_slug" "$icons_dir"; then
+		if is_appimage "$abs_appimage" && try_extract_icon_from_appimage "$abs_appimage" "$app_slug" "$icons_dir"; then
 			icon_target="$ICON_TARGET"
 			log "Extracted icon to: $icon_target"
 		else
-			warn "Could not extract icon; launcher will reference the AppImage path as icon"
+			warn "Could not extract icon; provide one with --icon (launcher will use the app path)"
 			icon_target="$dest_appimage"
 		fi
 	fi
@@ -508,7 +512,7 @@ core_update() {
 	# (slug/name), desktop entry, wrapper, and metadata. The registry does not
 	# store Comment/Categories/exec-args, so the .desktop and wrapper are left
 	# untouched.
-	local target="" appimage_path="" custom_icon=""
+	local target="" appimage_path="" custom_icon="" skip_validation=false
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -530,6 +534,10 @@ core_update() {
 			[ -n "$custom_icon" ] || die "--icon requires a value"
 			shift || true
 			;;
+		--skip-validation)
+			skip_validation=true
+			shift
+			;;
 		*) die "core_update: unknown option: $1" ;;
 		esac
 	done
@@ -537,8 +545,8 @@ core_update() {
 	[ -n "$target" ] || die "core_update: missing --target"
 	[ -n "$appimage_path" ] || die "core_update: missing --appimage"
 	[ -f "$appimage_path" ] || die "File not found: $appimage_path"
-	if ! is_appimage "$appimage_path"; then
-		die "Not a valid AppImage: $appimage_path"
+	if [ "$skip_validation" = false ] && ! is_appimage "$appimage_path"; then
+		die "Not a valid AppImage: $appimage_path (use --skip-validation to update anyway)"
 	fi
 
 	# Resolve the installed app by slug (preferred) or exact name.

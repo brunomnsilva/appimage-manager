@@ -71,7 +71,10 @@ be extracted.
 The main menu offers:
 
 - **Install an AppImage** — file picker, then prompts for name (prefilled from
-  the filename), comment, category, launch args, and icon.
+  the filename), comment, category, launch args, and icon. A file that is not a
+  valid AppImage (e.g. a standalone binary such as Winbox) triggers a warning
+  and offers to install it anyway; auto icon extraction is skipped, so provide a
+  custom icon.
 - **List installed** — shows a table of installed apps (name, path, status).
 - **Update an AppImage** — pick an installed app and a newer AppImage; the
   payload is replaced in place, keeping the name, menu entry, launch flags, and
@@ -110,6 +113,7 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 | `--icon PATH` | Custom icon file (`.png` or `.svg`) |
 | `--exec-args ARGS` | Extra args appended to the launch (e.g. `--no-sandbox`) |
 | `--force` | Overwrite existing AppImage, desktop entry, and icon |
+| `--skip-validation` | Install/update a file even if it is not a valid AppImage (e.g. a standalone binary); icon auto-extraction is skipped |
 | `--list, -l` | List installed AppImages and exit |
 | `--update TARGET` | Replace an installed app's AppImage (TARGET is its slug or display name); the positional path is the new file |
 | `-h, --help` | Show usage |
@@ -137,6 +141,9 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 
 # Update and replace its icon
 ./appimage-manager.sh --update Obsidian --icon ~/Pictures/obsidian.svg ~/Downloads/Obsidian-1.6.0.AppImage
+
+# Install a standalone binary (not a real AppImage), e.g. Winbox
+./appimage-manager.sh --skip-validation --name "Winbox" --icon ~/Pictures/winbox.png ~/Downloads/winbox
 ```
 
 ## How it works

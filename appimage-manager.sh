@@ -30,6 +30,8 @@ Options:
   --icon PATH          Path to a custom icon file (.png/.svg)
   --exec-args ARGS     Extra args appended to Exec= (e.g., --no-sandbox)
   --force              Overwrite existing AppImage, desktop, and icon
+  --skip-validation    Install/update a file even if it is not a valid AppImage
+                       (e.g. a standalone binary); icon auto-extraction is skipped
   --list, -l           List installed AppImages and exit
   --update TARGET      Replace an installed app's AppImage with a new file
                        (TARGET is the app slug or display name); the positional
@@ -76,6 +78,7 @@ main() {
 	local list_mode=false
 	local update_target=""
 	local install_flags=false
+	local skip_validation=false
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -116,6 +119,10 @@ main() {
 		--force)
 			force_overwrite=true
 			install_flags=true
+			shift
+			;;
+		--skip-validation)
+			skip_validation=true
 			shift
 			;;
 		--list | -l)
@@ -165,6 +172,7 @@ main() {
 		}
 		local -a update_args=(--target "$update_target" --appimage "$appimage_path")
 		[ -n "$custom_icon" ] && update_args+=(--icon "$custom_icon")
+		[ "$skip_validation" = true ] && update_args+=(--skip-validation)
 		core_update "${update_args[@]}"
 		return 0
 	fi
@@ -183,6 +191,7 @@ main() {
 		--exec-args "$exec_args"
 	)
 	[ "$force_overwrite" = true ] && args+=(--force)
+	[ "$skip_validation" = true ] && args+=(--skip-validation)
 
 	core_install "${args[@]}"
 }

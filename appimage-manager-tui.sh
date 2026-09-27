@@ -186,7 +186,7 @@ select_installed_app() {
 # starts from a cleared screen.
 tui_install() {
 	local appimage="" name="" comment="" categories="Utility;" exec_args="" icon=""
-	local base="" force=false step="appimage"
+	local base="" force=false skip_validation=false step="appimage"
 
 	while [ "$step" != "done" ]; do
 		clear_screen
@@ -200,14 +200,16 @@ tui_install() {
 				return
 			fi
 
+			skip_validation=false
 			if ! is_appimage "$appimage"; then
-				gum style --foreground "$COLOR_ERROR" "Not a valid AppImage: $appimage"
-				appimage=""
-				if ! gum confirm "Try again?"; then
+				gum style --foreground "$COLOR_WARNING" --bold "Not a valid AppImage: $appimage"
+				gum style --foreground "$COLOR_WARNING" \
+					"It will be installed as-is; icon auto-extraction is skipped."
+				if ! gum confirm "Install it anyway?"; then
 					STATUS="Cancelled."
 					return
 				fi
-				continue
+				skip_validation=true
 			fi
 
 			base=$(basename "$appimage")
@@ -347,6 +349,7 @@ tui_install() {
 			local -a args=(--appimage "$appimage" --name "$name" --categories "$categories" --comment "$comment" --exec-args "$exec_args")
 			[ -n "$icon" ] && args+=(--icon "$icon")
 			[ "$force" = true ] && args+=(--force)
+			[ "$skip_validation" = true ] && args+=(--skip-validation)
 
 			gum spin --spinner dot --title "Installing $name…" --show-output -- \
 				bash -c 'set -Eeuo pipefail; core_install "$@"' _ "${args[@]}"
@@ -444,15 +447,20 @@ tui_update() {
 	}
 	IFS=$'\t' read -r target_slug target_name _ <<<"$selection"
 
-	local new_appimage
+	local new_appimage skip_validation=false
 	if ! new_appimage=$(select_appimage); then
 		STATUS="Cancelled."
 		return
 	fi
 	if ! is_appimage "$new_appimage"; then
-		gum style --foreground "$COLOR_ERROR" "Not a valid AppImage: $new_appimage"
-		pause_key
-		return
+		gum style --foreground "$COLOR_WARNING" --bold "Not a valid AppImage: $new_appimage"
+		gum style --foreground "$COLOR_WARNING" \
+			"It will be installed as-is; icon auto-extraction is skipped."
+		if ! gum confirm "Update anyway?"; then
+			STATUS="Cancelled."
+			return
+		fi
+		skip_validation=true
 	fi
 
 	clear_screen
@@ -494,6 +502,7 @@ tui_update() {
 
 	local -a args=(--target "$target_slug" --appimage "$new_appimage")
 	[ -n "$icon" ] && args+=(--icon "$icon")
+	[ "$skip_validation" = true ] && args+=(--skip-validation)
 
 	gum spin --spinner dot --title "Updating $target_name…" --show-output -- \
 		bash -c 'set -Eeuo pipefail; core_update "$@"' _ "${args[@]}"
