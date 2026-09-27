@@ -4,13 +4,13 @@
 
 > The tool tracks installed AppImages and lets you list, update (soon) and remove them afterwards. See [how it works](#how-it-works). 
 
+![appimage-manager TUI screenshot](assets/appimage-manager-tui.png)
+
 It ships with two frontends that share the same core logic:
 
 - `appimage-manager-tui.sh` — an interactive TUI (powered by [gum](https://github.com/charmbracelet/gum)) for installing, listing, and uninstalling AppImages.
 - `appimage-manager.sh` — a scriptable command-line interface.
 
-
-(TODO: Insert TUI GIF here)
 
 ---
 
