@@ -181,8 +181,7 @@ dist/appimage-manager.sh
 dist/appimage-manager-tui.sh
 ```
 
-Attach these to a release and end users only need the one file. `dist/` is
-gitignored.
+You can find the latest built files in *Releases*.
 
 ## Testing
 
