@@ -32,14 +32,6 @@ COLOR_ERROR=1
 # Clear the screen and move the cursor home.
 clear_screen() { printf '\033[2J\033[H'; }
 
-# Replace a leading $HOME with ~ for compact display.
-shorten_home() {
-	case "$1" in
-	"$HOME"/*) printf '~%s' "${1#"$HOME"}" ;;
-	*) printf '%s' "$1" ;;
-	esac
-}
-
 # Width of the ASCII banner below (columns).
 BANNER_WIDTH=66
 

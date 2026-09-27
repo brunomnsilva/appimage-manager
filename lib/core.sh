@@ -137,6 +137,14 @@ try_extract_icon_from_appimage() {
 
 # --- Path helpers -----------------------------------------------------------
 
+# Replace a leading $HOME with ~ for compact display.
+shorten_home() {
+	case "$1" in
+	"$HOME"/*) printf '~%s' "${1#"$HOME"}" ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
 get_data_dir() { printf '%s' "${XDG_DATA_HOME:-$HOME/.local/share}"; }
 get_install_dir() { printf '%s' "$HOME/Applications"; }
 get_registry_file() { printf '%s/appimage-manager/registry.tsv' "$(get_data_dir)"; }
@@ -478,6 +486,6 @@ core_uninstall() {
 # can invoke them.
 export_all() {
 	export -f log warn err die command_exists abs_path slugify copy_file \
-		is_appimage try_extract_icon_from_appimage get_data_dir get_install_dir get_registry_file \
+		is_appimage try_extract_icon_from_appimage shorten_home get_data_dir get_install_dir get_registry_file \
 		core_install core_list core_uninstall
 }

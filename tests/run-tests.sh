@@ -209,6 +209,27 @@ else
 	ok "CLI errors on missing file"
 fi
 
+# --- CLI --list -------------------------------------------------------------
+
+if bash "$ROOT/appimage-manager.sh" --list >"$FIX/cli-list.out" 2>&1; then
+	ok "CLI --list exits 0"
+else
+	bad "CLI --list exits 0"
+fi
+assert_grep 'CLI App' "$FIX/cli-list.out" "CLI --list shows installed app"
+tilde='~'
+assert_grep "${tilde}/Applications/CLI App.AppImage" "$FIX/cli-list.out" "CLI --list shortens home"
+
+empty_home="$(mktemp -d)"
+if HOME="$empty_home" XDG_DATA_HOME="$empty_home/.local/share" \
+	bash "$ROOT/appimage-manager.sh" --list >"$FIX/cli-list-empty.out" 2>&1; then
+	ok "CLI --list exits 0 with empty registry"
+else
+	bad "CLI --list exits 0 with empty registry"
+fi
+assert_grep 'No apps installed' "$FIX/cli-list-empty.out" "CLI --list reports none installed"
+rm -rf "$empty_home"
+
 # --- Summary ---------------------------------------------------------------
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

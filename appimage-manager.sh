@@ -17,8 +17,10 @@ fi
 usage() {
 	cat <<'USAGE'
 Usage: appimage-manager.sh [OPTIONS] /path/to/AppImage
+       appimage-manager.sh --list
 
-Installs an AppImage into ~/Applications and integrates it with a desktop entry and icon.
+Installs an AppImage into ~/Applications and integrates it with a desktop entry
+and icon, or lists installed AppImages.
 
 Options:
   --name NAME          Display name for the app (defaults to file basename)
@@ -27,6 +29,7 @@ Options:
   --icon PATH          Path to a custom icon file (.png/.svg)
   --exec-args ARGS     Extra args appended to Exec= (e.g., --no-sandbox)
   --force              Overwrite existing AppImage, desktop, and icon
+  --list, -l           List installed AppImages and exit
   -h, --help           Show this help and exit
 
 Notes:
@@ -37,6 +40,26 @@ Notes:
 USAGE
 }
 
+print_list() {
+	local rows
+	rows=$(core_list)
+	if [ -z "$rows" ]; then
+		printf 'No apps installed.\n'
+		return 0
+	fi
+
+	local slug name appimage desktop icon wrapper tracked status
+	printf '%-28s  %-55s  %s\n' "NAME" "PATH" "STATUS"
+	while IFS=$'\t' read -r slug name appimage desktop icon wrapper tracked; do
+		if [ "$tracked" = "0" ]; then
+			status="legacy"
+		else
+			status="tracked"
+		fi
+		printf '%-28s  %-55s  %s\n' "$name" "$(shorten_home "$appimage")" "$status"
+	done <<<"$rows"
+}
+
 main() {
 	local appimage_path=""
 	local name=""
@@ -45,6 +68,7 @@ main() {
 	local custom_icon=""
 	local exec_args=""
 	local force_overwrite=false
+	local list_mode=false
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -82,6 +106,10 @@ main() {
 			force_overwrite=true
 			shift
 			;;
+		--list | -l)
+			list_mode=true
+			shift
+			;;
 		-h | --help)
 			usage
 			exit 0
@@ -104,6 +132,11 @@ main() {
 			;;
 		esac
 	done
+
+	if [ "$list_mode" = true ]; then
+		print_list
+		return 0
+	fi
 
 	[ -n "$appimage_path" ] || {
 		usage

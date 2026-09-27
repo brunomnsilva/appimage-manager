@@ -106,6 +106,7 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 | `--icon PATH` | Custom icon file (`.png` or `.svg`) |
 | `--exec-args ARGS` | Extra args appended to the launch (e.g. `--no-sandbox`) |
 | `--force` | Overwrite existing AppImage, desktop entry, and icon |
+| `--list, -l` | List installed AppImages and exit |
 | `-h, --help` | Show usage |
 
 ### Examples
@@ -122,6 +123,9 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 
 # Overwrite an existing install
 ./appimage-manager.sh --force ~/Downloads/Foo.AppImage
+
+# List installed AppImages
+./appimage-manager.sh --list
 ```
 
 ## How it works
