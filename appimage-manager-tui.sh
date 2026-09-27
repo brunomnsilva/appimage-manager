@@ -40,18 +40,37 @@ shorten_home() {
 	esac
 }
 
-# Boxed application title (emoji rendered via gum's emoji formatter).
+# Width of the ASCII banner below (columns).
+BANNER_WIDTH=66
+
+# Terminal width in columns (falls back to 80 when it cannot be determined).
+term_width() {
+	local w
+	w=$(tput cols 2>/dev/null || true)
+	case "$w" in '' | *[!0-9]*) w=${COLUMNS:-} ;; esac
+	case "$w" in '' | *[!0-9]*) w=80 ;; esac
+	printf '%s' "$w"
+}
+
+# Application title banner (accent-colored; compact when the terminal is narrow).
 app_title() {
-	printf '%s\n' ':toolbox: appimage-manager' |
-		gum format --type emoji |
-		gum style \
-			--border double \
-			--border-foreground "$COLOR_ACCENT" \
-			--foreground "$COLOR_ACCENT" \
-			--bold \
-			--align center \
-			--padding "1 4" \
-			--margin "1 0 1 0"
+	if [ "$(term_width)" -lt "$BANNER_WIDTH" ]; then
+		gum style --foreground "$COLOR_ACCENT" --bold --margin "1 0 1 0" "appimage-manager"
+		return
+	fi
+	{
+		printf '\u200b'
+		cat <<'BANNER'
+  ▄▄▄▄▄                    ▄▄▄▄
+▄██▀▀▀██▄ ▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄ ▀██▀ ▄▄▄▄▄▄▄▄▄ ▄▄▄▄▄▄▄  ▄▄▄▄▄▄   ▄▄▄▄▄
+██     ██ ██▀▀▀▀██ ██▀▀▀██▄ ██  ██▀▀██▀██▄ ▀▀▀▀▀██ ██▀▀▀██ ██▀▀▀██
+█████████ ██    ██ ██   ███ ██  ██  ██ ███▄██▀▀███ ██   ██ ██▀▀▀▀▀
+██     ██ ███████▀ ███████▀▄██▄ ██  ██ ██▄▀██▄▄███ ███████ ███████
+          ██▀      ██▀                             ▄▄▄▄▄██
+          ▀▀       ▀▀                              ▀▀▀▀▀▀
+                                                   MANAGER
+BANNER
+	} | gum style --foreground "$COLOR_ACCENT" --margin "1 0 1 0"
 }
 
 # Transient outcome message shown at the top of the main menu.
