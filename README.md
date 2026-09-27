@@ -1,11 +1,16 @@
 # AppImage Manager
 
-Install and integrate an AppImage into your user environment — no root required. The tool copies the AppImage to `~/Applications`, creates a desktop launcher in `~/.local/share/applications/`, and installs an icon in `~/.local/share/icons/` so the app shows up in your application menu.
+**Manage your AppImages** inside your user environment — no root required. 
+
+> The tool tracks installed AppImages and lets you list, update (soon) and remove them afterwards. See [how it works](#how-it-works). 
 
 It ships with two frontends that share the same core logic:
 
-- `appimage-manager.sh` — a scriptable command-line interface.
 - `appimage-manager-tui.sh` — an interactive TUI (powered by [gum](https://github.com/charmbracelet/gum)) for installing, listing, and uninstalling AppImages.
+- `appimage-manager.sh` — a scriptable command-line interface.
+
+
+(TODO: Insert TUI GIF here)
 
 ---
 
@@ -21,7 +26,7 @@ It ships with two frontends that share the same core logic:
 
 ## Requirements
 
-- Linux desktop with a freedesktop-compatible menu (GNOME-based recommended).
+- Linux desktop with a freedesktop-compatible menu, i.e., through [XDG Desktop Portal](https://wiki.archlinux.org/title/Desktop_entries).
 - Bash 4+.
 - `gum` (required for the TUI; not needed for the CLI).
 - Optional: `file` for better icon type detection (usually preinstalled).
@@ -40,17 +45,6 @@ tests/run-tests.sh           # headless test harness
 
 ## Quick start
 
-### CLI
-
-```bash
-chmod +x appimage-manager.sh
-./appimage-manager.sh ~/Downloads/Obsidian.AppImage
-```
-
-This copies the AppImage to `~/Applications/`, writes
-`~/.local/share/applications/<slug>.desktop`, and installs an icon when one can
-be extracted.
-
 ### TUI
 
 ```bash
@@ -61,33 +55,16 @@ chmod +x appimage-manager-tui.sh
 The TUI walks you through an install, or lets you list and uninstall existing
 apps from the main menu.
 
-## CLI options
-
-| Option | Description |
-|---|---|
-| `--name NAME` | Display name and base filename (default: from the AppImage filename) |
-| `--categories CATS` | Desktop menu categories (default: `Utility;`) |
-| `--comment TEXT` | One-line description for the launcher |
-| `--icon PATH` | Custom icon file (`.png` or `.svg`) |
-| `--exec-args ARGS` | Extra args appended to the launch (e.g. `--no-sandbox`) |
-| `--force` | Overwrite existing AppImage, desktop entry, and icon |
-| `-h, --help` | Show usage |
-
-### Examples
+### CLI
 
 ```bash
-# Basic install
-./appimage-manager.sh ~/Downloads/Obsidian-1.5.3.AppImage
-
-# Custom name and icon
-./appimage-manager.sh --name "Obsidian" --icon ~/Pictures/obsidian.svg ~/Downloads/Obsidian.AppImage
-
-# Chromium-based app that needs --no-sandbox
-./appimage-manager.sh --name "Brave" --exec-args "--no-sandbox" ~/Downloads/Brave.AppImage
-
-# Overwrite an existing install
-./appimage-manager.sh --force ~/Downloads/Foo.AppImage
+chmod +x appimage-manager.sh
+./appimage-manager.sh ~/Downloads/Obsidian.AppImage
 ```
+
+This copies the AppImage to `~/Applications/`, writes
+`~/.local/share/applications/<slug>.desktop`, and installs an icon when one can
+be extracted.
 
 ## TUI usage
 
@@ -119,6 +96,34 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 | Wayland (auto) | `--ozone-platform-hint=auto` |
 | Wayland (native) | `--enable-features=UseOzonePlatform,WaylandWindowDecorations --ozone-platform-hint=auto` |
 
+## CLI options
+
+| Option | Description |
+|---|---|
+| `--name NAME` | Display name and base filename (default: from the AppImage filename) |
+| `--categories CATS` | Desktop menu categories (default: `Utility;`) |
+| `--comment TEXT` | One-line description for the launcher |
+| `--icon PATH` | Custom icon file (`.png` or `.svg`) |
+| `--exec-args ARGS` | Extra args appended to the launch (e.g. `--no-sandbox`) |
+| `--force` | Overwrite existing AppImage, desktop entry, and icon |
+| `-h, --help` | Show usage |
+
+### Examples
+
+```bash
+# Basic install
+./appimage-manager.sh ~/Downloads/Obsidian-1.5.3.AppImage
+
+# Custom name and icon
+./appimage-manager.sh --name "Obsidian" --icon ~/Pictures/obsidian.svg ~/Downloads/Obsidian.AppImage
+
+# Chromium-based app that needs --no-sandbox
+./appimage-manager.sh --name "Brave" --exec-args "--no-sandbox" ~/Downloads/Brave.AppImage
+
+# Overwrite an existing install
+./appimage-manager.sh --force ~/Downloads/Foo.AppImage
+```
+
 ## How it works
 
 1. Copies the AppImage to `~/Applications/` and ensures it is executable.
@@ -137,12 +142,12 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 Installed apps are tracked in:
 
 ```
-${XDG_DATA_HOME:-~/.local/share}/appimage-manager/registry.tsv
+${XDG_DATA_HOME:-$HOME/.local/share}/appimage-manager/registry.tsv
 ```
 
 Each row stores the slug, name, AppImage path, desktop path, icon path, and
 wrapper path. Apps installed before the registry existed are still detected by
-scanning `~/Applications/*.AppImage` and shown as "legacy".
+scanning `~/Applications/*.AppImage` and shown as "**legacy**".
 
 ## Building a distributable
 
@@ -194,7 +199,7 @@ menu with `update-desktop-database ~/.local/share/applications` if available.
   `--exec-args "--no-sandbox"` or the TUI presets. Confirm the AppImage has
   execute permissions.
 
-### Ubuntu 24.04 and sandboxing
+### Sandboxing
 
 On Ubuntu 24.04 and newer, some Electron/Chromium-based AppImages (Obsidian,
 Brave, etc.) fail to launch from the menu even though they run from the file
@@ -218,3 +223,5 @@ AppImages fail to run at all, and rely on the launcher's automatic fallback.
 ## License
 
 See `LICENSE`.
+
+This application was heavily inspired in [AppImage-Install](https://github.com/lt-rawlins/AppImage-Install) and released under the same license.
