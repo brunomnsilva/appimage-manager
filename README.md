@@ -2,7 +2,7 @@
 
 **Manage your AppImages** inside your user environment — no root required. 
 
-> The tool tracks installed AppImages and lets you list, update (soon) and remove them afterwards. See [how it works](#how-it-works). 
+> The tool tracks installed AppImages and lets you list, update, and remove them afterwards. See [how it works](#how-it-works). 
 
 ![appimage-manager TUI screenshot](assets/appimage-manager-tui.png)
 
@@ -19,7 +19,7 @@ It ships with two frontends that share the same core logic:
 - **No root** — writes only to your user directories.
 - **App menu integration** — generates a freedesktop-compliant `.desktop` launcher.
 - **Icon support** — uses a provided icon, or extracts one from the AppImage when possible.
-- **Full lifecycle** — install, list, and uninstall AppImages (the TUI also exposes list/uninstall).
+- **Full lifecycle** — install, list, update, and uninstall AppImages.
 - **Safe defaults** — validates inputs, handles spaces, and avoids destructive changes unless `--force` is used.
 - **Smart launcher** — the generated wrapper detects a missing `libfuse2` and auto-falls-back to `--no-sandbox` if the first launch fails (helps on Ubuntu 24.04).
 - **Self-contained distribution** — `make bundle` inlines the library so each entrypoint can be shipped as a single file.
@@ -73,6 +73,10 @@ The main menu offers:
 - **Install an AppImage** — file picker, then prompts for name (prefilled from
   the filename), comment, category, launch args, and icon.
 - **List installed** — shows a table of installed apps (name, path, status).
+- **Update an AppImage** — pick an installed app and a newer AppImage; the
+  payload is replaced in place, keeping the name, menu entry, launch flags, and
+  icon (or choose a new icon). A warning reminds you to back up the current
+  file first.
 - **Uninstall** — select an app and confirm removal.
 - **Help** — brief description.
 - **Exit** — quit.
@@ -107,6 +111,7 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 | `--exec-args ARGS` | Extra args appended to the launch (e.g. `--no-sandbox`) |
 | `--force` | Overwrite existing AppImage, desktop entry, and icon |
 | `--list, -l` | List installed AppImages and exit |
+| `--update TARGET` | Replace an installed app's AppImage (TARGET is its slug or display name); the positional path is the new file |
 | `-h, --help` | Show usage |
 
 ### Examples
@@ -126,6 +131,12 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 
 # List installed AppImages
 ./appimage-manager.sh --list
+
+# Update an installed app with a newer AppImage (keeps its menu entry and icon)
+./appimage-manager.sh --update Obsidian ~/Downloads/Obsidian-1.6.0.AppImage
+
+# Update and replace its icon
+./appimage-manager.sh --update Obsidian --icon ~/Pictures/obsidian.svg ~/Downloads/Obsidian-1.6.0.AppImage
 ```
 
 ## How it works

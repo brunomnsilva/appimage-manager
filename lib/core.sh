@@ -480,6 +480,144 @@ core_uninstall() {
 	log "Uninstalled: $slug"
 }
 
+# Replace the icon field of a registry row (tracked installs only).
+core_registry_set_icon() {
+	local slug="$1" new_icon="$2"
+	local registry
+	registry=$(get_registry_file)
+	[ -f "$registry" ] || return 0
+
+	local tmp line f_slug f_name f_app f_desk f_wrap
+	tmp=$(mktemp)
+	while IFS= read -r line; do
+		[ -z "$line" ] && continue
+		case "$line" in
+		"$slug"$'\t'*)
+			IFS=$'\t' read -r f_slug f_name f_app f_desk _ f_wrap <<<"$line"
+			printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+				"$f_slug" "$f_name" "$f_app" "$f_desk" "$new_icon" "$f_wrap"
+			;;
+		*) printf '%s\n' "$line" ;;
+		esac
+	done <"$registry" >"$tmp"
+	mv "$tmp" "$registry"
+}
+
+core_update() {
+	# Replaces the installed AppImage payload, preserving the install identity
+	# (slug/name), desktop entry, wrapper, and metadata. The registry does not
+	# store Comment/Categories/exec-args, so the .desktop and wrapper are left
+	# untouched.
+	local target="" appimage_path="" custom_icon=""
+
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		--target)
+			shift
+			target="${1:-}"
+			[ -n "$target" ] || die "--target requires a value"
+			shift || true
+			;;
+		--appimage)
+			shift
+			appimage_path="${1:-}"
+			[ -n "$appimage_path" ] || die "--appimage requires a value"
+			shift || true
+			;;
+		--icon)
+			shift
+			custom_icon="${1:-}"
+			[ -n "$custom_icon" ] || die "--icon requires a value"
+			shift || true
+			;;
+		*) die "core_update: unknown option: $1" ;;
+		esac
+	done
+
+	[ -n "$target" ] || die "core_update: missing --target"
+	[ -n "$appimage_path" ] || die "core_update: missing --appimage"
+	[ -f "$appimage_path" ] || die "File not found: $appimage_path"
+	if ! is_appimage "$appimage_path"; then
+		die "Not a valid AppImage: $appimage_path"
+	fi
+
+	# Resolve the installed app by slug (preferred) or exact name.
+	local slug="" name="" installed="" desktop="" icon="" wrapper="" tracked="" found=0 matches=0
+	local r_slug r_name r_app r_desk r_icon r_wrap r_tracked
+	while IFS=$'\t' read -r r_slug r_name r_app r_desk r_icon r_wrap r_tracked; do
+		[ -n "$r_slug" ] || continue
+		if [ "$r_slug" = "$target" ]; then
+			slug="$r_slug" name="$r_name" installed="$r_app" desktop="$r_desk"
+			icon="$r_icon" wrapper="$r_wrap" tracked="$r_tracked"
+			found=1
+			break
+		fi
+		if [ "$r_name" = "$target" ]; then
+			slug="$r_slug" name="$r_name" installed="$r_app" desktop="$r_desk"
+			icon="$r_icon" wrapper="$r_wrap" tracked="$r_tracked"
+			found=1
+			matches=$((matches + 1))
+		fi
+	done < <(core_list)
+
+	if [ "$found" -eq 0 ]; then
+		die "No installed app matches: $target"
+	fi
+	if [ "$matches" -gt 1 ]; then
+		die "Name matches more than one installed app; use the slug: $target"
+	fi
+
+	local new_abs
+	new_abs=$(abs_path "$appimage_path")
+	if [ "$new_abs" = "$installed" ]; then
+		die "That is already the installed AppImage: $installed"
+	fi
+
+	# Replace atomically so a failed copy never truncates the installed app.
+	local dest_dir tmp
+	dest_dir=$(dirname "$installed")
+	mkdir -p "$dest_dir"
+	tmp=$(mktemp "$dest_dir/.update.XXXXXX")
+	if ! cp -f "$appimage_path" "$tmp"; then
+		rm -f "$tmp"
+		die "Failed to copy new AppImage"
+	fi
+	chmod +x "$tmp"
+	mv -f "$tmp" "$installed"
+	chmod +x "$installed"
+	log "Updated AppImage: $installed"
+
+	# Icon: keep the existing one by default; replace only when provided.
+	if [ -n "$custom_icon" ]; then
+		[ -f "$custom_icon" ] || die "Custom icon not found: $custom_icon"
+		local ext
+		case "$custom_icon" in
+		*.png) ext=".png" ;;
+		*.svg) ext=".svg" ;;
+		*) die "Unsupported icon type (use .png or .svg): $custom_icon" ;;
+		esac
+
+		local data_dir icons_dir new_icon
+		data_dir=$(get_data_dir)
+		icons_dir="$data_dir/icons/hicolor/256x256/apps"
+		new_icon="$icons_dir/${slug}${ext}"
+		copy_file "$custom_icon" "$new_icon"
+		log "Copied provided icon to: $new_icon"
+
+		if [ "$tracked" = "1" ]; then
+			core_registry_set_icon "$slug" "$new_icon"
+		fi
+
+		if [ -n "$icon" ] && [ "$icon" != "$installed" ] && [ "$icon" != "-" ] &&
+			[ "$icon" != "$new_icon" ] && [ -e "$icon" ]; then
+			rm -f "$icon"
+			log "Removed: $icon"
+		fi
+	fi
+
+	log "Updated: $name"
+}
+
 # --- Subsell support --------------------------------------------------------
 
 # Export every library function so subshells (e.g. `gum spin -- bash -c ...`)
@@ -487,5 +625,5 @@ core_uninstall() {
 export_all() {
 	export -f log warn err die command_exists abs_path slugify copy_file \
 		is_appimage try_extract_icon_from_appimage shorten_home get_data_dir get_install_dir get_registry_file \
-		core_install core_list core_uninstall
+		core_install core_list core_uninstall core_registry_set_icon core_update
 }

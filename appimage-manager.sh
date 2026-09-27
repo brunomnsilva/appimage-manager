@@ -18,9 +18,10 @@ usage() {
 	cat <<'USAGE'
 Usage: appimage-manager.sh [OPTIONS] /path/to/AppImage
        appimage-manager.sh --list
+       appimage-manager.sh --update <slug|name> /path/to/new.AppImage
 
 Installs an AppImage into ~/Applications and integrates it with a desktop entry
-and icon, or lists installed AppImages.
+and icon, lists installed AppImages, or updates an installed AppImage in place.
 
 Options:
   --name NAME          Display name for the app (defaults to file basename)
@@ -30,6 +31,10 @@ Options:
   --exec-args ARGS     Extra args appended to Exec= (e.g., --no-sandbox)
   --force              Overwrite existing AppImage, desktop, and icon
   --list, -l           List installed AppImages and exit
+  --update TARGET      Replace an installed app's AppImage with a new file
+                       (TARGET is the app slug or display name); the positional
+                       path is the new AppImage. Incompatible with --name,
+                       --categories, --comment, --exec-args, and --force.
   -h, --help           Show this help and exit
 
 Notes:
@@ -69,6 +74,8 @@ main() {
 	local exec_args=""
 	local force_overwrite=false
 	local list_mode=false
+	local update_target=""
+	local install_flags=false
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -77,18 +84,21 @@ main() {
 			name="${1:-}"
 			[ -n "$name" ] || die "--name requires a value"
 			shift || true
+			install_flags=true
 			;;
 		--categories)
 			shift
 			categories="${1:-}"
 			[ -n "$categories" ] || die "--categories requires a value"
 			shift || true
+			install_flags=true
 			;;
 		--comment)
 			shift
 			comment="${1:-}"
 			[ -n "$comment" ] || die "--comment requires a value"
 			shift || true
+			install_flags=true
 			;;
 		--icon)
 			shift
@@ -101,14 +111,22 @@ main() {
 			exec_args="${1:-}"
 			[ -n "$exec_args" ] || die "--exec-args requires a value"
 			shift || true
+			install_flags=true
 			;;
 		--force)
 			force_overwrite=true
+			install_flags=true
 			shift
 			;;
 		--list | -l)
 			list_mode=true
 			shift
+			;;
+		--update)
+			shift
+			update_target="${1:-}"
+			[ -n "$update_target" ] || die "--update requires a target (slug or name)"
+			shift || true
 			;;
 		-h | --help)
 			usage
@@ -135,6 +153,19 @@ main() {
 
 	if [ "$list_mode" = true ]; then
 		print_list
+		return 0
+	fi
+
+	if [ -n "$update_target" ]; then
+		[ "$install_flags" = false ] ||
+			die "--update cannot be combined with install options (--name, --categories, --comment, --exec-args, --force)"
+		[ -n "$appimage_path" ] || {
+			usage
+			die "--update requires the path to the new AppImage"
+		}
+		local -a update_args=(--target "$update_target" --appimage "$appimage_path")
+		[ -n "$custom_icon" ] && update_args+=(--icon "$custom_icon")
+		core_update "${update_args[@]}"
 		return 0
 	fi
 

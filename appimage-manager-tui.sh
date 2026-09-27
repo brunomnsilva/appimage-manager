@@ -108,22 +108,83 @@ exec_args_value() {
 	esac
 }
 
+# --- Selection helpers -----------------------------------------------------
+
+# Prompt for an AppImage under ~/Downloads (recursively), offering a "Browse
+# files…" escape for files elsewhere. On success prints the chosen path and
+# returns 0. Esc at the list (or at the empty-state picker) returns 1; Esc in
+# the browse sub-picker re-renders the list (back one level).
+select_appimage() {
+	local start_dir="$HOME/Downloads"
+	[ -d "$start_dir" ] || start_dir="$HOME"
+
+	while true; do
+		local -a files=() labels=()
+		local f p
+		while IFS= read -r f; do
+			files+=("$f")
+			labels+=("$(basename "$f")")
+		done < <(find "$start_dir" -type f -iname '*.AppImage' 2>/dev/null | sort)
+
+		if [ "${#labels[@]}" -eq 0 ]; then
+			gum style --foreground "$COLOR_SECONDARY" "No .AppImage files found in $start_dir" >&2
+			local picked
+			picked=$(gum file --file --height 15 "$start_dir") || return 1
+			printf '%s' "$picked"
+			return 0
+		fi
+
+		local choice
+		choice=$(gum choose --header "Select an AppImage" -- "${labels[@]}" "Browse files…") || return 1
+		if [ "$choice" = "Browse files…" ]; then
+			local picked
+			picked=$(gum file --file --height 15 "$start_dir") || continue
+			printf '%s' "$picked"
+			return 0
+		fi
+
+		local i
+		for i in "${!labels[@]}"; do
+			if [ "${labels[$i]}" = "$choice" ]; then
+				printf '%s' "${files[$i]}"
+				return 0
+			fi
+		done
+	done
+}
+
+# Prompt for one of the installed apps. On success prints
+# "slug<TAB>label<TAB>tracked" and returns 0; returns 1 on cancel.
+select_installed_app() {
+	local header="$1"
+	local -a slugs=() labels=() tracked_flags=()
+	local slug name appimage tracked
+	while IFS=$'\t' read -r slug name appimage _ _ _ tracked; do
+		slugs+=("$slug")
+		labels+=("$name — $(shorten_home "$appimage")")
+		tracked_flags+=("$tracked")
+	done < <(core_list)
+
+	local choice
+	choice=$(gum choose --header "$header" -- "${labels[@]}") || return 1
+	[ -n "$choice" ] || return 1
+
+	local i
+	for i in "${!labels[@]}"; do
+		if [ "${labels[$i]}" = "$choice" ]; then
+			printf '%s\t%s\t%s' "${slugs[$i]}" "${labels[$i]}" "${tracked_flags[$i]}"
+			return 0
+		fi
+	done
+	return 1
+}
+
 # --- Wizard ---------------------------------------------------------------
 
 # Esc backs one level: top step returns to the menu, other steps re-render the
 # previous one. Enter accepts the current value/default and advances. Each step
 # starts from a cleared screen.
 tui_install() {
-	local start_dir="$HOME/Downloads"
-	[ -d "$start_dir" ] || start_dir="$HOME"
-
-	# Collect candidate AppImages (recursively) from ~/Downloads.
-	local -a files=()
-	local f
-	while IFS= read -r f; do
-		files+=("$f")
-	done < <(find "$start_dir" -type f -iname '*.AppImage' 2>/dev/null | sort)
-
 	local appimage="" name="" comment="" categories="Utility;" exec_args="" icon=""
 	local base="" force=false step="appimage"
 
@@ -134,38 +195,9 @@ tui_install() {
 
 		case "$step" in
 		appimage)
-			local -a labels=()
-			local p
-			for p in "${files[@]}"; do
-				labels+=("$(basename "$p")")
-			done
-
-			if [ "${#labels[@]}" -eq 0 ]; then
-				gum style --foreground "$COLOR_SECONDARY" "No .AppImage files found in $start_dir"
-				if ! appimage=$(gum file --file --height 15 "$start_dir"); then
-					STATUS="Cancelled."
-					return
-				fi
-			else
-				local choice
-				if ! choice=$(gum choose --header "Select an AppImage" -- "${labels[@]}" "Browse files…"); then
-					STATUS="Cancelled."
-					return
-				fi
-				if [ "$choice" = "Browse files…" ]; then
-					if ! appimage=$(gum file --file --height 15 "$start_dir"); then
-						continue
-					fi
-				else
-					local i
-					for i in "${!labels[@]}"; do
-						if [ "${labels[$i]}" = "$choice" ]; then
-							appimage="${files[$i]}"
-							break
-						fi
-					done
-					[ -n "$appimage" ] || continue
-				fi
+			if ! appimage=$(select_appimage); then
+				STATUS="Cancelled."
+				return
 			fi
 
 			if ! is_appimage "$appimage"; then
@@ -366,37 +398,12 @@ tui_uninstall() {
 		return
 	fi
 
-	local -a slugs=() labels=() tracked_flags=()
-	local slug name appimage tracked
-	while IFS=$'\t' read -r slug name appimage _ _ _ tracked; do
-		slugs+=("$slug")
-		labels+=("$name — $(shorten_home "$appimage")")
-		tracked_flags+=("$tracked")
-	done <<<"$rows"
-
-	local choice
-	choice=$(gum choose --header "Select an AppImage to uninstall" -- "${labels[@]}" || true)
-	[ -n "$choice" ] || {
+	local selection target_slug target_name target_tracked
+	selection=$(select_installed_app "Select an AppImage to uninstall") || {
 		STATUS="Cancelled."
 		return
 	}
-
-	local idx=-1 i
-	for i in "${!labels[@]}"; do
-		if [ "${labels[$i]}" = "$choice" ]; then
-			idx="$i"
-			break
-		fi
-	done
-	[ "$idx" -ge 0 ] || {
-		gum style --foreground "$COLOR_ERROR" "Selection not found."
-		pause_key
-		return
-	}
-
-	local target_slug="${slugs[$idx]}"
-	local target_name="${labels[$idx]}"
-	local target_tracked="${tracked_flags[$idx]}"
+	IFS=$'\t' read -r target_slug target_name target_tracked <<<"$selection"
 
 	local confirm_text="Remove \"$target_name\"?"
 	if [ "$target_tracked" = "0" ]; then
@@ -417,15 +424,95 @@ tui_uninstall() {
 	pause_key
 }
 
+tui_update() {
+	clear_screen
+	app_title
+	printf '\n'
+
+	local rows
+	rows=$(core_list)
+	if [ -z "$rows" ]; then
+		gum style --foreground "$COLOR_SECONDARY" "No apps installed."
+		pause_key
+		return
+	fi
+
+	local selection target_slug target_name
+	selection=$(select_installed_app "Select an AppImage to update") || {
+		STATUS="Cancelled."
+		return
+	}
+	IFS=$'\t' read -r target_slug target_name _ <<<"$selection"
+
+	local new_appimage
+	if ! new_appimage=$(select_appimage); then
+		STATUS="Cancelled."
+		return
+	fi
+	if ! is_appimage "$new_appimage"; then
+		gum style --foreground "$COLOR_ERROR" "Not a valid AppImage: $new_appimage"
+		pause_key
+		return
+	fi
+
+	clear_screen
+	app_title
+	printf '\n'
+	local icon_choice icon=""
+	if ! icon_choice=$(gum choose --header "Icon" \
+		"Keep existing icon" "Provide custom icon"); then
+		STATUS="Cancelled."
+		return
+	fi
+	if [ "$icon_choice" = "Provide custom icon" ]; then
+		if ! icon=$(gum file --file --height 15 "$HOME"); then
+			STATUS="Cancelled."
+			return
+		fi
+	fi
+
+	clear_screen
+	app_title
+	printf '\n'
+	local icon_display="<keep existing>"
+	[ -n "$icon" ] && icon_display=$(shorten_home "$icon")
+	{
+		printf 'App:       %s\n' "$target_name"
+		printf 'New file:  %s\n' "$(shorten_home "$new_appimage")"
+		printf 'Icon:      %s\n' "$icon_display"
+	} | gum style --border rounded --padding "1 2"
+
+	gum style --foreground "$COLOR_WARNING" --bold \
+		"The current AppImage in ~/Applications will be overwritten."
+	gum style --foreground "$COLOR_WARNING" \
+		"Back it up first if you might need to revert."
+
+	if ! gum confirm "Update \"$target_name\"?"; then
+		STATUS="Cancelled."
+		return
+	fi
+
+	local -a args=(--target "$target_slug" --appimage "$new_appimage")
+	[ -n "$icon" ] && args+=(--icon "$icon")
+
+	gum spin --spinner dot --title "Updating $target_name…" --show-output -- \
+		bash -c 'set -Eeuo pipefail; core_update "$@"' _ "${args[@]}"
+
+	gum style --foreground "$COLOR_SUCCESS" --bold "Updated: $target_name"
+	pause_key
+}
+
 tui_help() {
 	clear_screen
 	app_title
 	printf '\n'
 	gum format <<'EOF'
-Install, list, and uninstall AppImages into your user environment.
+Install, list, update, and uninstall AppImages into your user environment.
 
 - **Install** — pick an AppImage and configure name, categories, icon, and launch flags.
 - **List** — show what is currently installed.
+- **Update** — replace an installed AppImage with a newer file (name, menu entry,
+  launch flags, and icon are kept unless you choose a new icon).
 - **Uninstall** — remove an installed AppImage and its launcher.
 
 The **Status** column on the List screen:
@@ -450,10 +537,11 @@ main_menu() {
 		show_status
 		local choice
 		choice=$(gum choose --header "" \
-			"Install an AppImage" "List installed" "Uninstall" "Help" "Exit" || true)
+			"Install an AppImage" "List installed" "Update an AppImage" "Uninstall" "Help" "Exit" || true)
 		case "${choice:-}" in
 		"Install an AppImage") tui_install ;;
 		"List installed") tui_list ;;
+		"Update an AppImage") tui_update ;;
 		"Uninstall") tui_uninstall ;;
 		"Help") tui_help ;;
 		"Exit" | "") break ;;

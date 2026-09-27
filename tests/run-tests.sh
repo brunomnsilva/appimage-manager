@@ -230,6 +230,72 @@ fi
 assert_grep 'No apps installed' "$FIX/cli-list-empty.out" "CLI --list reports none installed"
 rm -rf "$empty_home"
 
+# --- Update -----------------------------------------------------------------
+
+up_stub="$FIX/Updatable.AppImage"
+printf '#!/usr/bin/env bash\necho old\n' >"$up_stub"
+chmod +x "$up_stub"
+core_install --appimage "$up_stub" --name "Updatable" --force >/dev/null 2>&1
+
+up_new="$FIX/Updatable-2.AppImage"
+printf '#!/usr/bin/env bash\necho new\n' >"$up_new"
+
+if (core_update --target updatable --appimage "$up_new" >/dev/null 2>&1); then
+	ok "core_update succeeds"
+else
+	bad "core_update succeeds"
+fi
+assert_grep 'echo new' "$HOME/Applications/Updatable.AppImage" "core_update replaces AppImage content"
+assert_file "$HOME/.local/share/applications/updatable.desktop" "core_update keeps desktop entry"
+assert_file "$HOME/.local/bin/updatable-appimage-launcher" "core_update keeps wrapper"
+assert_grep $'^updatable\t' "$HOME/.local/share/appimage-manager/registry.tsv" "core_update keeps registry row"
+
+if (core_update --target nope --appimage "$up_new" >/dev/null 2>&1); then
+	bad "core_update rejects unknown target"
+else
+	ok "core_update rejects unknown target"
+fi
+
+icon2="$FIX/icon2.png"
+printf 'not-a-real-png-2' >"$icon2"
+if (
+	unset APPIMAGE_MANAGER_SKIP_VALIDATE
+	core_update --target updatable --appimage "$icon2" >/dev/null 2>&1
+); then
+	bad "core_update rejects non-AppImage"
+else
+	ok "core_update rejects non-AppImage"
+fi
+
+if (core_update --target updatable --appimage "$HOME/Applications/Updatable.AppImage" >/dev/null 2>&1); then
+	bad "core_update rejects the already-installed file"
+else
+	ok "core_update rejects the already-installed file"
+fi
+
+if (core_update --target updatable --appimage "$up_new" --icon "$icon2" >/dev/null 2>&1); then
+	ok "core_update with --icon succeeds"
+else
+	bad "core_update with --icon succeeds"
+fi
+assert_file "$HOME/.local/share/icons/hicolor/256x256/apps/updatable.png" "core_update copies new icon"
+assert_grep 'updatable.png' "$HOME/.local/share/appimage-manager/registry.tsv" "core_update updates registry icon"
+
+cli_new="$FIX/CLI-Updatable-2.AppImage"
+printf '#!/usr/bin/env bash\necho cli-new\n' >"$cli_new"
+if bash "$ROOT/appimage-manager.sh" --update "Updatable" "$cli_new" >/dev/null 2>&1; then
+	ok "CLI --update succeeds"
+else
+	bad "CLI --update succeeds"
+fi
+assert_grep 'echo cli-new' "$HOME/Applications/Updatable.AppImage" "CLI --update replaces content"
+
+if bash "$ROOT/appimage-manager.sh" --update "Updatable" --name "X" "$cli_new" >/dev/null 2>&1; then
+	bad "CLI --update rejects install options"
+else
+	ok "CLI --update rejects install options"
+fi
+
 # --- Summary ---------------------------------------------------------------
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
