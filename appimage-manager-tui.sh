@@ -33,7 +33,7 @@ COLOR_ERROR=1
 clear_screen() { printf '\033[2J\033[H'; }
 
 # Width of the ASCII banner below (columns).
-BANNER_WIDTH=66
+BANNER_WIDTH=67
 
 # Terminal width in columns (falls back to 80 when it cannot be determined).
 term_width() {
@@ -60,7 +60,7 @@ app_title() {
 ██     ██ ███████▀ ███████▀▄██▄ ██  ██ ██▄▀██▄▄███ ███████ ███████
           ██       ██                              ▄▄▄▄▄██
           ▀▀       ▀▀                              ▀▀▀▀▀▀
-                                                  MANAGER
+                                                   MANAGER
 BANNER
 	} | gum style --foreground "$COLOR_ACCENT" --margin "1 0 1 0"
 }
