@@ -32,7 +32,9 @@ It ships with two frontends that share the same core logic:
 
 - Linux desktop with a freedesktop-compatible menu, i.e., through [XDG Desktop Portal](https://wiki.archlinux.org/title/Desktop_entries).
 - Bash 4+.
-- `gum` (required for the TUI; not needed for the CLI).
+- `gum` (required for the TUI; not needed for the CLI). Both gum 2.x and older
+  builds such as 0.16 (Fedora 43) work: picker padding is applied only when the
+  running gum supports it.
 - Optional: `file` for better icon type detection (usually preinstalled).
 - Development only: `shellcheck` and `shfmt` (for `make test` / `make fmt`).
 

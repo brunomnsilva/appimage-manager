@@ -15,6 +15,11 @@ fi
 
 command_exists gum || die "gum is required for TUI mode. Install it with: sudo pacman -S gum (or: brew install gum / go install github.com/charmbracelet/gum@latest)"
 
+# `gum file` gained the generic --padding style flag in gum 2.0. Older builds
+# (e.g. gum 0.16 on Fedora 43) reject `--padding` with "unknown flag". Passing
+# it through the environment is backward-compatible: gum 2.x reads
+# $GUM_FILE_PADDING, while older gum simply ignores the unknown variable.
+
 export_all
 
 # --- Palette ----------------------------------------------------------------
@@ -147,7 +152,7 @@ select_appimage() {
 		if [ "${#labels[@]}" -eq 0 ]; then
 			gum style --foreground "$COLOR_SECONDARY" "No .AppImage files found in $start_dir"
 			gum style --foreground "$COLOR_SECONDARY" "$file_prompt"
-			picked=$(gum file --file --padding="3" --height 15 "$start_dir") || return 1
+			picked=$(GUM_FILE_PADDING="3" gum file --file --height 15 "$start_dir") || return 1
 			SELECTED_APPIMAGE="$picked"
 			return 0
 		fi
@@ -156,7 +161,7 @@ select_appimage() {
 		choice=$(gum choose --header "$list_header" -- "${labels[@]}" "Browse files…") || return 1
 		if [ "$choice" = "Browse files…" ]; then
 			gum style --foreground "$COLOR_SECONDARY" "$file_prompt"
-			picked=$(gum file --file --padding="3" --height 15 "$start_dir") || continue
+			picked=$(GUM_FILE_PADDING="3" gum file --file --height 15 "$start_dir") || continue
 			SELECTED_APPIMAGE="$picked"
 			return 0
 		fi
@@ -330,7 +335,7 @@ tui_install() {
 			icon=""
 			if [ "$icon_choice" = "Provide custom icon" ]; then
 				gum style --foreground "$COLOR_SECONDARY" "Select an icon file (.png or .svg)"
-				if ! icon=$(gum file --file --padding="3" --height 15 "$HOME"); then
+				if ! icon=$(GUM_FILE_PADDING="3" gum file --file --height 15 "$HOME"); then
 					continue
 				fi
 			fi
@@ -500,7 +505,7 @@ tui_update() {
 		fi
 		# Esc in the file chooser returns to the icon chooser (back one level).
 		gum style --foreground "$COLOR_SECONDARY" "Select an icon file (.png or .svg)"
-		if icon=$(gum file --file --padding="3" --height 15 "$HOME"); then
+		if icon=$(GUM_FILE_PADDING="3" gum file --file --height 15 "$HOME"); then
 			break
 		fi
 	done
