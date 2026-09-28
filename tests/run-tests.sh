@@ -14,6 +14,22 @@ export XDG_DATA_HOME="$TESTHOME/.local/share"
 # install/uninstall flows (the real check is tested separately below).
 export APPIMAGE_MANAGER_SKIP_VALIDATE=1
 
+# Stub the optional cache-refresh tools so the suite is deterministic (they may
+# be absent on CI) and we can assert refresh_desktop_caches invokes them.
+STUBBIN="$TESTHOME/stubbin"
+mkdir -p "$STUBBIN"
+export CACHE_LOG="$TESTHOME/cache-calls.log"
+: >"$CACHE_LOG"
+for cache_tool in gtk-update-icon-cache update-desktop-database; do
+	cat >"$STUBBIN/$cache_tool" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "$cache_tool" >>"\$CACHE_LOG"
+exit 0
+EOF
+	chmod +x "$STUBBIN/$cache_tool"
+done
+export PATH="$STUBBIN:$PATH"
+
 pass=0
 fail=0
 
@@ -95,6 +111,7 @@ assert_eq "$(abs_path "$TESTHOME/x")" "$TESTHOME/x" "abs_path identity"
 
 # --- Install --------------------------------------------------------------
 
+: >"$CACHE_LOG"
 if (core_install --appimage "$stub" --name "Test App" --categories "Office;" --comment "A test app" --exec-args "--foo" --force >/dev/null 2>&1); then
 	ok "core_install succeeds"
 else
@@ -105,6 +122,8 @@ assert_file "$HOME/Applications/Test App.AppImage" "install copies AppImage"
 assert_file "$HOME/.local/share/applications/test-app.desktop" "install writes desktop entry"
 assert_file "$HOME/.local/bin/test-app-appimage-launcher" "install writes wrapper"
 assert_file "$HOME/.local/share/appimage-manager/registry.tsv" "install writes registry"
+assert_grep '^gtk-update-icon-cache$' "$CACHE_LOG" "install refreshes icon cache"
+assert_grep '^update-desktop-database$' "$CACHE_LOG" "install refreshes desktop database"
 
 desktop="$HOME/.local/share/applications/test-app.desktop"
 assert_grep '^Name=Test App$' "$desktop" "desktop Name correct"
@@ -151,11 +170,13 @@ fi
 
 # --- Subshell invocation (gum spin mechanism) --------------------------------
 
+: >"$CACHE_LOG"
 if bash -c 'set -Eeuo pipefail; core_install "$@"' _ --appimage "$stub" --name "Subshell App" --force >/dev/null 2>&1; then
 	ok "core_install callable in subshell via export_all"
 else
 	bad "core_install callable in subshell via export_all"
 fi
+assert_grep '^gtk-update-icon-cache$' "$CACHE_LOG" "cache refresh exported to subshell"
 
 # --- List -------------------------------------------------------------------
 
@@ -166,6 +187,7 @@ assert_grep $'^subshell-app\t' "$FIX/list.tsv" "list includes subshell-app"
 
 # --- Uninstall --------------------------------------------------------------
 
+: >"$CACHE_LOG"
 if (core_uninstall "test-app" >/dev/null 2>&1); then
 	ok "core_uninstall succeeds"
 else
@@ -180,6 +202,8 @@ if grep -q $'^test-app\t' "$HOME/.local/share/appimage-manager/registry.tsv" 2>/
 else
 	ok "uninstall removes registry row"
 fi
+assert_grep '^gtk-update-icon-cache$' "$CACHE_LOG" "uninstall refreshes icon cache"
+assert_grep '^update-desktop-database$' "$CACHE_LOG" "uninstall refreshes desktop database"
 
 # --- Legacy scan (pre-registry) ----------------------------------------------
 
@@ -240,6 +264,7 @@ core_install --appimage "$up_stub" --name "Updatable" --force >/dev/null 2>&1
 up_new="$FIX/Updatable-2.AppImage"
 printf '#!/usr/bin/env bash\necho new\n' >"$up_new"
 
+: >"$CACHE_LOG"
 if (core_update --target updatable --appimage "$up_new" >/dev/null 2>&1); then
 	ok "core_update succeeds"
 else
@@ -249,6 +274,8 @@ assert_grep 'echo new' "$HOME/Applications/Updatable.AppImage" "core_update repl
 assert_file "$HOME/.local/share/applications/updatable.desktop" "core_update keeps desktop entry"
 assert_file "$HOME/.local/bin/updatable-appimage-launcher" "core_update keeps wrapper"
 assert_grep $'^updatable\t' "$HOME/.local/share/appimage-manager/registry.tsv" "core_update keeps registry row"
+assert_grep '^gtk-update-icon-cache$' "$CACHE_LOG" "update refreshes icon cache"
+assert_grep '^update-desktop-database$' "$CACHE_LOG" "update refreshes desktop database"
 
 if (core_update --target nope --appimage "$up_new" >/dev/null 2>&1); then
 	bad "core_update rejects unknown target"

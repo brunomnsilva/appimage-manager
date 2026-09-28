@@ -32,4 +32,9 @@ share a single library.
 - The bundler marker in entrypoints is `# ===BUNDLE_CORE_HERE===`.
 - The install registry is TSV and every field must be non-empty (`read` collapses
   empty IFS fields and would misalign columns).
+- New `lib/core.sh` functions used by `core_*` must be added to `export_all`, or
+  `gum spin -- bash -c ...` subshells cannot call them.
+- Lifecycle ops best-effort refresh desktop caches via `refresh_desktop_caches`
+  (`gtk-update-icon-cache -f -t`, `update-desktop-database`); both tools are
+  optional and guarded with `command_exists`.
 - Never commit `dist/` or `PLAN.md`.

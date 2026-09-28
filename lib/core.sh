@@ -149,6 +149,31 @@ get_data_dir() { printf '%s' "${XDG_DATA_HOME:-$HOME/.local/share}"; }
 get_install_dir() { printf '%s' "$HOME/Applications"; }
 get_registry_file() { printf '%s/appimage-manager/registry.tsv' "$(get_data_dir)"; }
 
+# Best-effort refresh of desktop/icon caches so newly written (or removed)
+# entries show up without a re-login. Some desktops (e.g. Fedora) rely on the
+# icon cache while others (e.g. Arch) pick icons up automatically; running these
+# is harmless everywhere. Tools are optional and failures are ignored, and the
+# XDG data dir is used rather than a hardcoded $HOME.
+refresh_desktop_caches() {
+	local data_dir icons_root apps_dir refreshed=false
+	data_dir=$(get_data_dir)
+	icons_root="$data_dir/icons/hicolor"
+	apps_dir="$data_dir/applications"
+
+	if [ -d "$icons_root" ] && command_exists gtk-update-icon-cache; then
+		# -t (--ignore-theme-index) is required because the user hicolor dir
+		# normally has no index.theme.
+		gtk-update-icon-cache -f -t "$icons_root" >/dev/null 2>&1 || true
+		refreshed=true
+	fi
+	if [ -d "$apps_dir" ] && command_exists update-desktop-database; then
+		update-desktop-database "$apps_dir" >/dev/null 2>&1 || true
+		refreshed=true
+	fi
+	[ "$refreshed" = true ] && log "Refreshed desktop caches"
+	return 0
+}
+
 # --- Core operations --------------------------------------------------------
 
 core_install() {
@@ -353,6 +378,8 @@ DESKTOP
 		"$app_slug" "$safe_name" "$dest_appimage" "$desktop_file" "$reg_icon" "$wrapper_path" \
 		>>"$registry"
 
+	refresh_desktop_caches
+
 	log "Installed AppImage: $dest_appimage"
 	log "Desktop entry created: $desktop_file"
 	log "Icon installed: $icon_target"
@@ -480,6 +507,8 @@ core_uninstall() {
 			rm -f "$registry"
 		fi
 	fi
+
+	refresh_desktop_caches
 
 	log "Uninstalled: $slug"
 }
@@ -623,6 +652,8 @@ core_update() {
 		fi
 	fi
 
+	refresh_desktop_caches
+
 	log "Updated: $name"
 }
 
@@ -633,5 +664,6 @@ core_update() {
 export_all() {
 	export -f log warn err die command_exists abs_path slugify copy_file \
 		is_appimage try_extract_icon_from_appimage shorten_home get_data_dir get_install_dir get_registry_file \
+		refresh_desktop_caches \
 		core_install core_list core_uninstall core_registry_set_icon core_update
 }

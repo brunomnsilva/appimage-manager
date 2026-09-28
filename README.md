@@ -164,6 +164,11 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 4. Writes a `.desktop` entry that references the wrapper, sets `Path=` to
    `~/Applications`, and passes `%U` so file/URL arguments work from the menu.
 5. Records the install in a registry so the TUI can list and uninstall it.
+6. Refreshes the desktop caches (`gtk-update-icon-cache` and
+   `update-desktop-database`, when available) so the entry and icon appear
+   without re-logging in. Some desktops (e.g. Fedora) rely on the icon cache
+   while others (e.g. Arch) pick icons up automatically; running both is
+   harmless. The same refresh runs after updates and uninstalls.
 
 ### Registry
 
@@ -239,8 +244,13 @@ rm ~/.local/bin/<slug>-appimage-launcher
 rm ~/.local/share/icons/hicolor/256x256/apps/<slug>.png   # or .svg, if present
 ```
 
-The TUI's **Uninstall** option does this automatically. Optionally refresh the
-menu with `update-desktop-database ~/.local/share/applications` if available.
+The TUI's **Uninstall** option does this automatically, including the cache
+refresh below. If you remove files manually, refresh the menu/caches yourself:
+
+```bash
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor 2>/dev/null || true
+update-desktop-database ~/.local/share/applications 2>/dev/null || true
+```
 
 ## Troubleshooting
 
