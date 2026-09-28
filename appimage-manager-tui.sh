@@ -19,7 +19,7 @@ command_exists gum || die "gum is required for TUI mode. Install it with: sudo p
 # (e.g. gum 0.16 on Fedora 43) reject `--padding` with "unknown flag". Passing
 # it through the environment is backward-compatible: gum 2.x reads
 # $GUM_FILE_PADDING, while older gum ignores the unknown variable. See
-# file_picker_intro for the dynamic padding used to keep the banner visible.
+# file_picker_intro below for the padding "hack" that keeps the banner visible.
 
 export_all
 
@@ -89,11 +89,26 @@ banner_lines() {
 	fi
 }
 
-# Redraw the banner and prompt just before a `gum file` picker, then reserve
-# exactly those rows via bottom padding. gum >= 0.17 renders a full-height
-# frame and scrolls away everything printed above it (issues #969/#977); the
-# bottom padding keeps the banner on screen. It is capped so the file list
-# keeps a usable height on short terminals. Older gum ignores the variable.
+# --- gum `file` padding hack ------------------------------------------------
+#
+# Why: gum >= 0.17 renders `gum file` as a full-height frame that scrolls the
+# screen, so the banner/prompt printed above it are pushed off (upstream bugs
+# #969 "clears the screen" and #977 "always clips the topmost option"; the
+# `--height` cap was also dropped, see PR #975, still open). gum <= 0.16 renders
+# a short inline picker and is unaffected.
+#
+# How: the rendered frame is (top padding + file list + help footer), and gum
+# sizes the list as `terminal_rows - top - bottom - help`, so the frame height
+# is effectively `terminal_rows - bottom`. The terminal scrolls by
+# `rows_printed_above - bottom`, so reserving `bottom` rows keeps the last
+# `bottom` lines (here: the banner and prompt) on screen. `bottom` is therefore
+# set to the number of rows we just printed, capped so the list stays usable.
+#
+# The value is passed as the env var `GUM_FILE_PADDING` rather than the
+# `--padding` flag so gum 0.16 (which rejects the flag) just ignores it.
+#
+# Constants: top=3 un-clips the first list row (#977 workaround); help=2 is the
+# footer height assumed for the cap; min_picker keeps the list from collapsing.
 file_picker_intro() {
 	local prompt="$1" note="${2:-}"
 	clear_screen
@@ -111,6 +126,8 @@ file_picker_intro() {
 	fi
 	above=$(($(banner_lines) + 2 + extra))
 
+	# top: un-clip the first list row (#977); help: footer rows assumed for the
+	# cap; min_picker: keep at least this many list rows even on tiny terminals.
 	local top=3 help=2 min_picker=6 max_bottom
 	max_bottom=$(($(term_height) - top - help - min_picker))
 	if [ "$max_bottom" -lt 1 ]; then
