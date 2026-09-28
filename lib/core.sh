@@ -60,11 +60,140 @@ is_appimage() {
 	return 1
 }
 
+icon_extension() {
+	# $1 path
+	# Prints the icon extension (with leading dot) for a file. Symlinks are
+	# resolved first (a `.DirIcon` is usually a symlink, and `file` reports
+	# those as `inode/symlink`). The filename extension is trusted when known;
+	# otherwise the content magic is sniffed, then `file -L` (dereferenced) if
+	# available. Falls back to .png.
+	local path="$1" resolved
+	resolved=$(abs_path "$path")
+	[ -n "$resolved" ] || resolved="$path"
+
+	case "${resolved,,}" in
+	*.svg)
+		printf '.svg'
+		return 0
+		;;
+	*.svgz)
+		printf '.svgz'
+		return 0
+		;;
+	*.png)
+		printf '.png'
+		return 0
+		;;
+	*.jpg | *.jpeg)
+		printf '.jpg'
+		return 0
+		;;
+	*.gif)
+		printf '.gif'
+		return 0
+		;;
+	*.webp)
+		printf '.webp'
+		return 0
+		;;
+	*.xpm)
+		printf '.xpm'
+		return 0
+		;;
+	*.ico)
+		printf '.ico'
+		return 0
+		;;
+	esac
+
+	local magic
+	magic=$(od -An -tx1 -N 8 "$resolved" 2>/dev/null | tr -d ' \n')
+	case "$magic" in
+	89504e470d0a1a0a*)
+		printf '.png'
+		return 0
+		;;
+	ffd8ff*)
+		printf '.jpg'
+		return 0
+		;;
+	474946*)
+		printf '.gif'
+		return 0
+		;;
+	00000100*)
+		printf '.ico'
+		return 0
+		;;
+	1f8b*)
+		printf '.svgz'
+		return 0
+		;;
+	esac
+	# Textual SVG/XML, or an XPM C source header.
+	if LC_ALL=C head -c 1024 "$resolved" 2>/dev/null | grep -Eqi '<svg|<\?xml'; then
+		printf '.svg'
+		return 0
+	fi
+	if LC_ALL=C head -c 64 "$resolved" 2>/dev/null | grep -q '/\* XPM \*/'; then
+		printf '.xpm'
+		return 0
+	fi
+	if command_exists file; then
+		local mime
+		mime=$(file -L --mime-type -b "$resolved" 2>/dev/null || true)
+		case "$mime" in
+		image/svg+xml)
+			printf '.svg'
+			return 0
+			;;
+		image/png)
+			printf '.png'
+			return 0
+			;;
+		image/jpeg)
+			printf '.jpg'
+			return 0
+			;;
+		image/gif)
+			printf '.gif'
+			return 0
+			;;
+		image/webp)
+			printf '.webp'
+			return 0
+			;;
+		image/x-xpixmap | image/xpm)
+			printf '.xpm'
+			return 0
+			;;
+		image/vnd.microsoft.icon | image/x-icon)
+			printf '.ico'
+			return 0
+			;;
+		esac
+	fi
+	printf '.png'
+}
+
+icon_dir_for_ext() {
+	# $1 extension (with or without leading dot)
+	# Directory an icon of this type belongs to: SVG goes to the scalable
+	# bucket, everything else to 256x256/apps. Raster icons are placed in the
+	# 256x256 bucket even when their real pixel size differs; GTK scales them,
+	# so this known simplification works across desktops.
+	case "${1,,}" in
+	.svg | .svgz) printf '%s/icons/hicolor/scalable/apps' "$(get_data_dir)" ;;
+	*) printf '%s/icons/hicolor/256x256/apps' "$(get_data_dir)" ;;
+	esac
+}
+
 try_extract_icon_from_appimage() {
-	# $1 appimage_path, $2 dest_basename_without_ext, $3 icons_dir
-	# Attempts to extract an icon from the AppImage payload.
+	# $1 appimage_path, $2 dest_basename_without_ext
+	# Attempts to extract an icon from the AppImage payload, placing it in the
+	# right hicolor bucket for its type (SVG -> scalable/apps).
 	# Returns 0 on success and sets ICON_TARGET global; else 1.
-	local appimage="$1" base="$2" icons_dir="$3"
+	local appimage="$1" base="$2"
 	local tmp
 	tmp=$(mktemp -d)
 	# Guarded so it is safe if the RETURN trap also fires in a caller scope
@@ -107,29 +236,12 @@ try_extract_icon_from_appimage() {
 		return 1
 	fi
 
-	local ext=""
-	case "$candidate" in
-	*.svg) ext=".svg" ;;
-	*.png) ext=".png" ;;
-	*)
-		# Try to detect from mime
-		if command_exists file; then
-			local mime
-			mime=$(file --mime-type -b "$candidate" || true)
-			case "$mime" in
-			image/svg+xml) ext=".svg" ;;
-			image/png) ext=".png" ;;
-			*) ext="" ;;
-			esac
-		fi
-		;;
-	esac
-
-	# Default to .png if unknown
-	[ -n "$ext" ] || ext=".png"
-
-	local target="$icons_dir/${base}${ext}"
+	local ext icons_dir target
+	ext=$(icon_extension "$candidate")
+	icons_dir=$(icon_dir_for_ext "$ext")
+	target="$icons_dir/${base}${ext}"
 	mkdir -p "$icons_dir"
+	# cp dereferences the source, so a `.DirIcon` symlink is copied as content.
 	cp -f "$candidate" "$target"
 	ICON_TARGET="$target"
 	return 0
@@ -254,13 +366,14 @@ core_install() {
 	app_slug=$(slugify "$app_name")
 	[ -n "$app_slug" ] || die "Could not derive a valid slug from name: $app_name"
 
-	local install_dir data_dir desktop_dir icons_dir
+	local install_dir data_dir desktop_dir
 	install_dir=$(get_install_dir)
 	data_dir=$(get_data_dir)
 	desktop_dir="$data_dir/applications"
-	icons_dir="$data_dir/icons/hicolor/256x256/apps"
 
-	mkdir -p "$install_dir" "$desktop_dir" "$icons_dir"
+	# Ensure the icon theme root exists so the cache refresh below is useful
+	# even when this install has no icon (fallback to the AppImage path).
+	mkdir -p "$install_dir" "$desktop_dir" "$data_dir/icons/hicolor"
 
 	local dest_appimage="$install_dir/${app_name}.AppImage"
 	if [ -e "$dest_appimage" ] && [ "$force" = false ]; then
@@ -281,11 +394,13 @@ core_install() {
 		*.svg) ext=".svg" ;;
 		*) die "Unsupported icon type (use .png or .svg): $custom_icon" ;;
 		esac
+		local icons_dir
+		icons_dir=$(icon_dir_for_ext "$ext")
 		icon_target="$icons_dir/${app_slug}${ext}"
 		log "Copying provided icon to: $icon_target"
 		copy_file "$custom_icon" "$icon_target"
 	else
-		if is_appimage "$abs_appimage" && try_extract_icon_from_appimage "$abs_appimage" "$app_slug" "$icons_dir"; then
+		if is_appimage "$abs_appimage" && try_extract_icon_from_appimage "$abs_appimage" "$app_slug"; then
 			icon_target="$ICON_TARGET"
 			log "Extracted icon to: $icon_target"
 		else
@@ -335,10 +450,11 @@ WRAP
 	local exec_line
 	exec_line="\"$wrapper_path\" %U"
 
-	# Icon can be a name (no ext) if placed into icons theme; if a file path, keep absolute
+	# Icon can be a name (no ext) when placed into the icon theme (any size
+	# bucket); otherwise keep the absolute path.
 	local icon_field
 	case "$icon_target" in
-	"$icons_dir/${app_slug}.png" | "$icons_dir/${app_slug}.svg")
+	"$data_dir/icons/hicolor/"*"/apps/${app_slug}."*)
 		icon_field="$app_slug"
 		;;
 	*)
@@ -482,13 +598,15 @@ core_uninstall() {
 			log "Removed: $icon"
 		fi
 	else
-		local e ip
-		for e in png svg; do
-			ip="$data_dir/icons/hicolor/256x256/apps/$slug.$e"
-			if [ -e "$ip" ]; then
-				rm -f "$ip"
-				log "Removed: $ip"
-			fi
+		local e d ip
+		for d in scalable 256x256; do
+			for e in png svg; do
+				ip="$data_dir/icons/hicolor/$d/apps/$slug.$e"
+				if [ -e "$ip" ]; then
+					rm -f "$ip"
+					log "Removed: $ip"
+				fi
+			done
 		done
 	fi
 
@@ -634,9 +752,8 @@ core_update() {
 		*) die "Unsupported icon type (use .png or .svg): $custom_icon" ;;
 		esac
 
-		local data_dir icons_dir new_icon
-		data_dir=$(get_data_dir)
-		icons_dir="$data_dir/icons/hicolor/256x256/apps"
+		local icons_dir new_icon
+		icons_dir=$(icon_dir_for_ext "$ext")
 		new_icon="$icons_dir/${slug}${ext}"
 		copy_file "$custom_icon" "$new_icon"
 		log "Copied provided icon to: $new_icon"
@@ -663,7 +780,8 @@ core_update() {
 # can invoke them.
 export_all() {
 	export -f log warn err die command_exists abs_path slugify copy_file \
-		is_appimage try_extract_icon_from_appimage shorten_home get_data_dir get_install_dir get_registry_file \
+		is_appimage icon_extension icon_dir_for_ext try_extract_icon_from_appimage \
+		shorten_home get_data_dir get_install_dir get_registry_file \
 		refresh_desktop_caches \
 		core_install core_list core_uninstall core_registry_set_icon core_update
 }

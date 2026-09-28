@@ -74,6 +74,33 @@ printf 'not-a-real-png' >"$icon"
 realapp="$FIX/Real.AppImage"
 printf '\x7f\x45\x4c\x46\x02\x01\x01\x00AI' >"$realapp"
 
+svgicon="$FIX/icon.svg"
+printf '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"/>' >"$svgicon"
+
+# Extensionless icon fixtures for icon_extension content sniffing.
+noext_svg="$FIX/noext-svg"
+printf '<svg xmlns="http://www.w3.org/2000/svg"/>' >"$noext_svg"
+noext_png="$FIX/noext-png"
+printf '\x89PNG\r\n\x1a\n' >"$noext_png"
+
+# A `.DirIcon` symlink to an SVG (common in AppImages, e.g. WaveScope).
+dircicon_dir="$FIX/diricon"
+mkdir -p "$dircicon_dir"
+printf '<svg xmlns="http://www.w3.org/2000/svg"/>' >"$dircicon_dir/wavescope.svg"
+ln -sf wavescope.svg "$dircicon_dir/.DirIcon"
+
+# Stub "AppImage" whose --appimage-extract emits a symlinked .DirIcon + SVG.
+extract_stub="$FIX/Extractor.AppImage"
+cat >"$extract_stub" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "--appimage-extract" ] || exit 1
+mkdir -p squashfs-root
+printf '<svg xmlns="http://www.w3.org/2000/svg"/>' >squashfs-root/wavescope.svg
+ln -sf wavescope.svg squashfs-root/.DirIcon
+exit 0
+EOF
+chmod +x "$extract_stub"
+
 # --- is_appimage validation -------------------------------------------------
 
 if (
@@ -108,6 +135,13 @@ fi
 assert_eq "$(slugify 'My App_Name')" 'my-app-name' "slugify basic"
 assert_eq "$(slugify '  Foo!!Bar  ')" 'foo-bar' "slugify strips invalid chars"
 assert_eq "$(abs_path "$TESTHOME/x")" "$TESTHOME/x" "abs_path identity"
+
+# --- icon_extension --------------------------------------------------------
+
+assert_eq "$(icon_extension "$svgicon")" '.svg' "icon_extension keeps named .svg"
+assert_eq "$(icon_extension "$noext_svg")" '.svg' "icon_extension sniffs extensionless SVG"
+assert_eq "$(icon_extension "$noext_png")" '.png' "icon_extension sniffs extensionless PNG"
+assert_eq "$(icon_extension "$dircicon_dir/.DirIcon")" '.svg' "icon_extension resolves symlinked .DirIcon"
 
 # --- Install --------------------------------------------------------------
 
@@ -155,6 +189,24 @@ fi
 
 assert_file "$HOME/.local/share/icons/hicolor/256x256/apps/iconed-app.png" "custom icon copied"
 assert_grep '^Icon=iconed-app$' "$HOME/.local/share/applications/iconed-app.desktop" "desktop Icon uses theme name"
+
+if (core_install --appimage "$stub" --name "Svg App" --icon "$svgicon" --force >/dev/null 2>&1); then
+	ok "install with custom SVG icon succeeds"
+else
+	bad "install with custom SVG icon succeeds"
+fi
+assert_file "$HOME/.local/share/icons/hicolor/scalable/apps/svg-app.svg" "custom SVG icon placed in scalable"
+assert_grep '^Icon=svg-app$' "$HOME/.local/share/applications/svg-app.desktop" "desktop Icon uses theme name for SVG"
+
+# --- Icon extraction (symlinked .DirIcon, e.g. WaveScope) -------------------
+
+extracted=$(
+	try_extract_icon_from_appimage "$extract_stub" "wavescope" &&
+		printf '%s' "$ICON_TARGET"
+) || true
+assert_eq "$extracted" "$HOME/.local/share/icons/hicolor/scalable/apps/wavescope.svg" "extracts symlinked SVG icon to scalable bucket"
+assert_file "$HOME/.local/share/icons/hicolor/scalable/apps/wavescope.svg" "extracted SVG icon written"
+assert_grep '<svg' "$HOME/.local/share/icons/hicolor/scalable/apps/wavescope.svg" "extracted SVG content preserved"
 
 # --- Wrapper --no-sandbox fallback ------------------------------------------
 

@@ -37,4 +37,7 @@ share a single library.
 - Lifecycle ops best-effort refresh desktop caches via `refresh_desktop_caches`
   (`gtk-update-icon-cache -f -t`, `update-desktop-database`); both tools are
   optional and guarded with `command_exists`.
+- Icon typing goes through `icon_extension` (resolves symlinks, sniffs magic;
+  `file` is only a fallback) and placement through `icon_dir_for_ext` (SVG ->
+  `scalable/apps`, raster -> `256x256/apps`; raster size is not detected).
 - Never commit `dist/` or `PLAN.md`.

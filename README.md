@@ -35,7 +35,8 @@ It ships with two frontends that share the same core logic:
 - `gum` (required for the TUI; not needed for the CLI). Both gum 2.x and older
   builds such as 0.16 (Fedora 43) work: picker padding is applied only when the
   running gum supports it.
-- Optional: `file` for better icon type detection (usually preinstalled).
+- Optional: `file` as a fallback for icon type detection (usually preinstalled;
+  the type is normally determined from the filename or content magic bytes).
 - Development only: `shellcheck` and `shfmt` (for `make test` / `make fmt`).
 
 ## Project structure
@@ -156,8 +157,11 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 
 1. Copies the AppImage to `~/Applications/` and ensures it is executable.
 2. Tries to extract an icon by running the AppImage with `--appimage-extract`
-   and searching common icon paths; if none is found, the AppImage path is used
-   as a fallback icon.
+   and searching common icon paths; the type is determined from the filename or
+   content (symlinked `.DirIcon`s included), and the icon is placed in the right
+   hicolor bucket: SVG in `scalable/apps`, raster in `256x256/apps`. Raster
+   icons keep the 256x256 bucket regardless of their real pixel size (desktops
+   scale them). If no icon is found, the AppImage path is used as a fallback.
 3. Writes a small launcher wrapper to `~/.local/bin/` that:
    - sets `APPIMAGE_EXTRACT_AND_RUN=1` when `libfuse.so.2` is missing, and
    - retries with `--no-sandbox` if the normal launch fails.
