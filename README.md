@@ -178,11 +178,19 @@ scanning `~/Applications/*.AppImage` and shown as "**legacy**".
 ## Building a distributable
 
 `make bundle` inlines `lib/core.sh` into each entrypoint, producing
-self-contained single files:
+self-contained single files (no `.sh` extension, so they read as commands):
 
 ```
-dist/appimage-manager.sh
-dist/appimage-manager-tui.sh
+dist/appimage-manager
+dist/appimage-manager-tui
+```
+
+Install them into `~/.local/bin` (override the destination with `PREFIX`):
+
+```bash
+make install            # -> ~/.local/bin
+make install PREFIX=/usr/local
+make uninstall          # remove them from $(PREFIX)/bin
 ```
 
 This is automated in CI (`.github/workflows/`): every push and pull request

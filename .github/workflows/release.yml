@@ -46,7 +46,7 @@ jobs:
         run: make test
 
       - name: Generate checksums
-        run: (cd dist && sha256sum appimage-manager.sh appimage-manager-tui.sh > SHA256SUMS)
+        run: (cd dist && sha256sum appimage-manager appimage-manager-tui > SHA256SUMS)
 
       - name: Publish release
         env:

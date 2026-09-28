@@ -20,7 +20,9 @@ share a single library.
 - `make test` — shellcheck + shfmt check + bundle + tests.
 - `make lint` — shellcheck only.
 - `make fmt` — `shfmt -w` on all sources.
-- `make bundle` — generate `dist/appimage-manager.sh` and `dist/appimage-manager-tui.sh`.
+- `make bundle` — generate `dist/appimage-manager` and `dist/appimage-manager-tui`.
+- `make install` — bundle and copy both into `$(PREFIX)/bin` (default `~/.local/bin`).
+- `make uninstall` — remove them from `$(PREFIX)/bin`.
 - `make clean` — remove `dist/`.
 
 ## Conventions

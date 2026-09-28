@@ -16,9 +16,9 @@ fi
 
 usage() {
 	cat <<'USAGE'
-Usage: appimage-manager.sh [OPTIONS] /path/to/AppImage
-       appimage-manager.sh --list
-       appimage-manager.sh --update <slug|name> /path/to/new.AppImage
+Usage: appimage-manager [OPTIONS] /path/to/AppImage
+       appimage-manager --list
+       appimage-manager --update <slug|name> /path/to/new.AppImage
 
 Installs an AppImage into ~/Applications and integrates it with a desktop entry
 and icon, lists installed AppImages, or updates an installed AppImage in place.
