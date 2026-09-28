@@ -15,10 +15,11 @@ fi
 
 command_exists gum || die "gum is required for TUI mode. Install it with: sudo pacman -S gum (or: brew install gum / go install github.com/charmbracelet/gum@latest)"
 
-# `gum file` gained the generic --padding style flag in gum 2.0. Older builds
+# `gum file` gained the generic --padding style flag in gum 2.0; older builds
 # (e.g. gum 0.16 on Fedora 43) reject `--padding` with "unknown flag". Passing
 # it through the environment is backward-compatible: gum 2.x reads
-# $GUM_FILE_PADDING, while older gum simply ignores the unknown variable.
+# $GUM_FILE_PADDING, while older gum ignores the unknown variable. See
+# file_picker_intro for the dynamic padding used to keep the banner visible.
 
 export_all
 
@@ -49,6 +50,15 @@ term_width() {
 	printf '%s' "$w"
 }
 
+# Terminal height in rows (falls back to 24 when it cannot be determined).
+term_height() {
+	local h
+	h=$(tput lines 2>/dev/null || true)
+	case "$h" in '' | *[!0-9]*) h=${LINES:-} ;; esac
+	case "$h" in '' | *[!0-9]*) h=24 ;; esac
+	printf '%s' "$h"
+}
+
 # Application title banner (accent-colored; compact when the terminal is narrow).
 app_title() {
 	if [ "$(term_width)" -lt "$BANNER_WIDTH" ]; then
@@ -68,6 +78,49 @@ app_title() {
                                                    MANAGER
 BANNER
 	} | gum style --foreground "$COLOR_ACCENT" --margin "1 0 1 0"
+}
+
+# Number of rows `app_title` renders (art/compact line plus its style margin).
+banner_lines() {
+	if [ "$(term_width)" -lt "$BANNER_WIDTH" ]; then
+		printf '3'
+	else
+		printf '10'
+	fi
+}
+
+# Redraw the banner and prompt just before a `gum file` picker, then reserve
+# exactly those rows via bottom padding. gum >= 0.17 renders a full-height
+# frame and scrolls away everything printed above it (issues #969/#977); the
+# bottom padding keeps the banner on screen. It is capped so the file list
+# keeps a usable height on short terminals. Older gum ignores the variable.
+file_picker_intro() {
+	local prompt="$1" note="${2:-}"
+	clear_screen
+	app_title
+	printf '\n'
+	if [ -n "$note" ]; then
+		gum style --foreground "$COLOR_SECONDARY" "$note"
+	fi
+	gum style --foreground "$COLOR_SECONDARY" "$prompt"
+
+	# Rows printed above the picker: banner + blank + optional note + prompt.
+	local above extra=0
+	if [ -n "$note" ]; then
+		extra=1
+	fi
+	above=$(($(banner_lines) + 2 + extra))
+
+	local top=3 help=2 min_picker=6 max_bottom
+	max_bottom=$(($(term_height) - top - help - min_picker))
+	if [ "$max_bottom" -lt 1 ]; then
+		max_bottom=1
+	fi
+	if [ "$above" -gt "$max_bottom" ]; then
+		above="$max_bottom"
+	fi
+
+	export GUM_FILE_PADDING="$top 0 $above 0"
 }
 
 # Transient outcome message shown at the top of the main menu.
@@ -150,9 +203,8 @@ select_appimage() {
 		done < <(find "$start_dir" -type f -iname '*.AppImage' 2>/dev/null | sort)
 
 		if [ "${#labels[@]}" -eq 0 ]; then
-			gum style --foreground "$COLOR_SECONDARY" "No .AppImage files found in $start_dir"
-			gum style --foreground "$COLOR_SECONDARY" "$file_prompt"
-			picked=$(GUM_FILE_PADDING="3" gum file --file --height 15 "$start_dir") || return 1
+			file_picker_intro "$file_prompt" "No .AppImage files found in $start_dir"
+			picked=$(gum file --file --height 15 "$start_dir") || return 1
 			SELECTED_APPIMAGE="$picked"
 			return 0
 		fi
@@ -160,8 +212,8 @@ select_appimage() {
 		local choice
 		choice=$(gum choose --header "$list_header" -- "${labels[@]}" "Browse files…") || return 1
 		if [ "$choice" = "Browse files…" ]; then
-			gum style --foreground "$COLOR_SECONDARY" "$file_prompt"
-			picked=$(GUM_FILE_PADDING="3" gum file --file --height 15 "$start_dir") || continue
+			file_picker_intro "$file_prompt"
+			picked=$(gum file --file --height 15 "$start_dir") || continue
 			SELECTED_APPIMAGE="$picked"
 			return 0
 		fi
@@ -334,8 +386,8 @@ tui_install() {
 			fi
 			icon=""
 			if [ "$icon_choice" = "Provide custom icon" ]; then
-				gum style --foreground "$COLOR_SECONDARY" "Select an icon file (.png or .svg)"
-				if ! icon=$(GUM_FILE_PADDING="3" gum file --file --height 15 "$HOME"); then
+				file_picker_intro "Select an icon file (.png or .svg)"
+				if ! icon=$(gum file --file --height 15 "$HOME"); then
 					continue
 				fi
 			fi
@@ -504,8 +556,8 @@ tui_update() {
 			break
 		fi
 		# Esc in the file chooser returns to the icon chooser (back one level).
-		gum style --foreground "$COLOR_SECONDARY" "Select an icon file (.png or .svg)"
-		if icon=$(GUM_FILE_PADDING="3" gum file --file --height 15 "$HOME"); then
+		file_picker_intro "Select an icon file (.png or .svg)"
+		if icon=$(gum file --file --height 15 "$HOME"); then
 			break
 		fi
 	done
