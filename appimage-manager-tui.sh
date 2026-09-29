@@ -58,6 +58,9 @@ clear_screen() { printf '\033[2J\033[H'; }
 # Width of the ASCII banner below (columns).
 BANNER_WIDTH=67
 
+# Max length of a value shown in the install summary (keeps the box sane).
+SUMMARY_MAX=60
+
 # Terminal width in columns (falls back to 80 when it cannot be determined).
 term_width() {
 	local w
@@ -95,6 +98,23 @@ app_title() {
                                                    MANAGER
 BANNER
 	} | gum style --foreground "$COLOR_ACCENT" --margin "1 0 1 0"
+}
+
+# Shorten a value to at most <max> characters, appending "(...)" when cut, so
+# long summaries don't blow up the bordered box.
+clamp_text() {
+	local text="$1" max="${2:-$SUMMARY_MAX}"
+	if [ "${#text}" -le "$max" ]; then
+		printf '%s' "$text"
+		return
+	fi
+	local suffix="(...)"
+	local keep=$((max - ${#suffix}))
+	if [ "$keep" -lt 1 ]; then
+		printf '%s' "$suffix"
+		return
+	fi
+	printf '%s%s' "${text:0:$keep}" "$suffix"
 }
 
 # Number of rows `app_title` renders (art/compact line plus its style margin).
@@ -522,9 +542,9 @@ tui_install() {
 			{
 				printf 'AppImage:   %s\n' "$(shorten_home "$appimage")"
 				printf 'Name:       %s\n' "$name"
-				printf 'Categories: %s\n' "$categories"
-				printf 'Mime types: %s\n' "${mimetypes:-<none>}"
-				printf 'Exec args:  %s\n' "${exec_args:-<none>}"
+				printf 'Categories: %s\n' "$(clamp_text "$categories")"
+				printf 'Mime types: %s\n' "$(clamp_text "${mimetypes:-<none>}")"
+				printf 'Exec args:  %s\n' "$(clamp_text "${exec_args:-<none>}")"
 				printf 'Icon:       %s\n' "$icon_display"
 				printf 'Overwrite:  %s\n' "$force"
 			} | gum style --border rounded --padding "1 2"
