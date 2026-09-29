@@ -77,11 +77,14 @@ be extracted.
 
 The main menu offers:
 
-- **Install an AppImage** — file picker, then prompts for name (prefilled from
-  the filename), comment, category, launch args, and icon. A file that is not a
-  valid AppImage (e.g. a standalone binary such as Winbox) triggers a warning
-  and offers to install it anyway; auto icon extraction is skipped, so provide a
-  custom icon.
+- **Install an AppImage** — file picker, then prompts for name, comment,
+  category, MIME types, launch args, and icon. A valid AppImage is extracted
+  once and its bundled `.desktop` is read to **prefill** name, comment,
+  categories, and MIME types as suggestions you can edit. If the payload bundles
+  an icon, the icon step offers *Auto-extract (icon is bundled)*; otherwise it
+  warns that no icon is bundled and offers a custom icon or none. A file that is
+  not a valid AppImage (e.g. a standalone binary such as Winbox) triggers a
+  warning and offers to install it anyway; inspection is skipped.
 - **List installed** — shows a table of installed apps (name, path, status).
 - **Update an AppImage** — pick an installed app and a newer AppImage; the
   payload is replaced in place, keeping the name, menu entry, launch flags, and
@@ -116,6 +119,7 @@ Instead of typing flags, pick from common presets (multi-select) or choose
 |---|---|
 | `--name NAME` | Display name and base filename (default: from the AppImage filename) |
 | `--categories CATS` | Desktop menu categories (default: `Utility;`) |
+| `--mime-types TYPES` | Semicolon-separated MIME types the app handles (e.g. `image/png;text/plain;`), written to `MimeType=` |
 | `--comment TEXT` | One-line description for the launcher |
 | `--icon PATH` | Custom icon file (`.png` or `.svg`) |
 | `--exec-args ARGS` | Extra args appended to the launch (e.g. `--no-sandbox`) |
@@ -166,7 +170,9 @@ Instead of typing flags, pick from common presets (multi-select) or choose
    - sets `APPIMAGE_EXTRACT_AND_RUN=1` when `libfuse.so.2` is missing, and
    - retries with `--no-sandbox` if the normal launch fails.
 4. Writes a `.desktop` entry that references the wrapper, sets `Path=` to
-   `~/Applications`, and passes `%U` so file/URL arguments work from the menu.
+   `~/Applications`, passes `%U` so file/URL arguments work from the menu, and
+   includes `MimeType=` when MIME types were provided (the TUI prefills these
+   from the AppImage's own bundled `.desktop`).
 5. Records the install in a registry so the TUI can list and uninstall it.
 6. Refreshes the desktop caches (`gtk-update-icon-cache` and
    `update-desktop-database`, when available) so the entry and icon appear

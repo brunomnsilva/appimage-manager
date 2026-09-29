@@ -40,4 +40,9 @@ share a single library.
 - Icon typing goes through `icon_extension` (resolves symlinks, sniffs magic;
   `file` is only a fallback) and placement through `icon_dir_for_ext` (SVG ->
   `scalable/apps`, raster -> `256x256/apps`; raster size is not detected).
+- The TUI inspects a selected AppImage once (`extract_appimage`) and reads its
+  bundled `.desktop` via `payload_desktop_path`/`payload_desktop_read` to
+  prefill name/comment/categories/MIME types; it exports
+  `APPIMAGE_MANAGER_EXTRACTED_ROOT` so `core_install` reuses that tree instead of
+  extracting again. Payload input is assumed well-formed (suggestions only).
 - Never commit `dist/` or `PLAN.md`.

@@ -101,6 +101,27 @@ exit 0
 EOF
 chmod +x "$extract_stub"
 
+# A prebuilt extracted AppDir tree for payload parsing / reuse tests.
+payload_root="$FIX/payload/squashfs-root"
+mkdir -p "$payload_root/usr/share/icons/hicolor/scalable/apps"
+cat >"$payload_root/Foo.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name[de]=Lokaler Name
+Name=Foo Bar
+Comment=A foo tool
+Exec=AppRun %U
+Icon=foo
+Categories=Utility;Graphics;
+MimeType=image/png;text/plain;x-scheme-handler/foo;
+[Desktop Action New]
+Name=New
+Exec=AppRun --new
+X-GNOME-UsesNotifications=true
+EOF
+printf '<svg xmlns="http://www.w3.org/2000/svg"/>' >"$payload_root/foo.svg"
+ln -sf foo.svg "$payload_root/.DirIcon"
+
 # --- is_appimage validation -------------------------------------------------
 
 if (
@@ -143,6 +164,16 @@ assert_eq "$(icon_extension "$noext_svg")" '.svg' "icon_extension sniffs extensi
 assert_eq "$(icon_extension "$noext_png")" '.png' "icon_extension sniffs extensionless PNG"
 assert_eq "$(icon_extension "$dircicon_dir/.DirIcon")" '.svg' "icon_extension resolves symlinked .DirIcon"
 
+# --- Payload inspection helpers --------------------------------------------
+
+assert_eq "$(payload_desktop_path "$payload_root")" "$payload_root/Foo.desktop" "payload_desktop_path finds root desktop"
+payload_desktop_read "$payload_root/Foo.desktop"
+assert_eq "$PAYLOAD_NAME" "Foo Bar" "payload Name ignores localized key"
+assert_eq "$PAYLOAD_COMMENT" "A foo tool" "payload Comment read"
+assert_eq "$PAYLOAD_CATEGORIES" "Utility;Graphics;" "payload Categories read"
+assert_eq "$PAYLOAD_MIMETYPES" "image/png;text/plain;x-scheme-handler/foo;" "payload MimeType read"
+assert_eq "$(payload_icon_path "$payload_root")" "$payload_root/.DirIcon" "payload_icon_path finds .DirIcon"
+
 # --- Install --------------------------------------------------------------
 
 : >"$CACHE_LOG"
@@ -164,6 +195,20 @@ assert_grep '^Name=Test App$' "$desktop" "desktop Name correct"
 assert_grep '^Categories=Office;$' "$desktop" "desktop Categories correct"
 assert_grep '^Icon=.*Test App.AppImage$' "$desktop" "desktop Icon falls back to AppImage"
 assert_grep '--foo' "$HOME/.local/bin/test-app-appimage-launcher" "wrapper contains exec-args"
+if grep -q '^MimeType=' "$desktop"; then
+	bad "desktop omits MimeType when unset"
+else
+	ok "desktop omits MimeType when unset"
+fi
+
+# --- MIME types ------------------------------------------------------------
+
+if (core_install --appimage "$stub" --name "Mime App" --mime-types "image/png;text/plain;" --force >/dev/null 2>&1); then
+	ok "core_install --mime-types succeeds"
+else
+	bad "core_install --mime-types succeeds"
+fi
+assert_grep '^MimeType=image/png;text/plain;$' "$HOME/.local/share/applications/mime-app.desktop" "--mime-types writes MimeType"
 
 # --- Overwrite / --force ---------------------------------------------------
 
@@ -208,6 +253,13 @@ assert_eq "$extracted" "$HOME/.local/share/icons/hicolor/scalable/apps/wavescope
 assert_file "$HOME/.local/share/icons/hicolor/scalable/apps/wavescope.svg" "extracted SVG icon written"
 assert_grep '<svg' "$HOME/.local/share/icons/hicolor/scalable/apps/wavescope.svg" "extracted SVG content preserved"
 
+# Reusing a pre-extracted tree must not run the (nonexistent) AppImage.
+if try_extract_icon_from_appimage "$FIX/DoesNotExist.AppImage" "reuse-app" "$payload_root"; then
+	assert_file "$HOME/.local/share/icons/hicolor/scalable/apps/reuse-app.svg" "reused tree extracts icon without running AppImage"
+else
+	bad "reused tree extracts icon without running AppImage"
+fi
+
 # --- Wrapper --no-sandbox fallback ------------------------------------------
 
 (core_install --appimage "$nsapp" --name "Needs Sandbox" --force >/dev/null 2>&1)
@@ -236,6 +288,11 @@ core_list >"$FIX/list.tsv"
 assert_grep $'^test-app\t' "$FIX/list.tsv" "list includes test-app"
 assert_grep $'^needs-sandbox\t' "$FIX/list.tsv" "list includes needs-sandbox"
 assert_grep $'^subshell-app\t' "$FIX/list.tsv" "list includes subshell-app"
+if sort -t$'\t' -k2,2f -c "$FIX/list.tsv" >/dev/null 2>&1; then
+	ok "core_list is sorted by name"
+else
+	bad "core_list is sorted by name"
+fi
 
 # --- Uninstall --------------------------------------------------------------
 
@@ -272,6 +329,13 @@ else
 	bad "CLI entrypoint installs"
 fi
 assert_file "$HOME/Applications/CLI App.AppImage" "CLI entrypoint copies AppImage"
+
+if bash "$ROOT/appimage-manager.sh" --name "CLI Mime" --mime-types "audio/mpeg;" "$stub" >/dev/null 2>&1; then
+	ok "CLI --mime-types installs"
+else
+	bad "CLI --mime-types installs"
+fi
+assert_grep '^MimeType=audio/mpeg;$' "$HOME/.local/share/applications/cli-mime.desktop" "CLI --mime-types writes MimeType"
 
 if bash "$ROOT/appimage-manager.sh" --help >/dev/null 2>&1; then
 	ok "CLI --help exits 0"

@@ -26,6 +26,8 @@ and icon, lists installed AppImages, or updates an installed AppImage in place.
 Options:
   --name NAME          Display name for the app (defaults to file basename)
   --categories CATS    Desktop Categories (default: Utility;)
+  --mime-types TYPES   Semicolon-separated MIME types the app handles
+                       (e.g. "image/png;text/plain;"), written to MimeType=
   --comment TEXT       One-line description for the launcher
   --icon PATH          Path to a custom icon file (.png/.svg)
   --exec-args ARGS     Extra args appended to Exec= (e.g., --no-sandbox)
@@ -36,7 +38,8 @@ Options:
   --update TARGET      Replace an installed app's AppImage with a new file
                        (TARGET is the app slug or display name); the positional
                        path is the new AppImage. Incompatible with --name,
-                       --categories, --comment, --exec-args, and --force.
+                       --categories, --mime-types, --comment, --exec-args, and
+                       --force.
   -h, --help           Show this help and exit
 
 Notes:
@@ -74,6 +77,7 @@ main() {
 	local comment=""
 	local custom_icon=""
 	local exec_args=""
+	local mime_types=""
 	local force_overwrite=false
 	local list_mode=false
 	local update_target=""
@@ -100,6 +104,13 @@ main() {
 			shift
 			comment="${1:-}"
 			[ -n "$comment" ] || die "--comment requires a value"
+			shift || true
+			install_flags=true
+			;;
+		--mime-types)
+			shift
+			mime_types="${1:-}"
+			[ -n "$mime_types" ] || die "--mime-types requires a value"
 			shift || true
 			install_flags=true
 			;;
@@ -165,7 +176,7 @@ main() {
 
 	if [ -n "$update_target" ]; then
 		[ "$install_flags" = false ] ||
-			die "--update cannot be combined with install options (--name, --categories, --comment, --exec-args, --force)"
+			die "--update cannot be combined with install options (--name, --categories, --mime-types, --comment, --exec-args, --force)"
 		[ -n "$appimage_path" ] || {
 			usage
 			die "--update requires the path to the new AppImage"
@@ -186,6 +197,7 @@ main() {
 		--appimage "$appimage_path"
 		--name "$name"
 		--categories "$categories"
+		--mime-types "$mime_types"
 		--comment "$comment"
 		--icon "$custom_icon"
 		--exec-args "$exec_args"

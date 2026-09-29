@@ -188,50 +188,119 @@ icon_dir_for_ext() {
 	esac
 }
 
-try_extract_icon_from_appimage() {
-	# $1 appimage_path, $2 dest_basename_without_ext
-	# Attempts to extract an icon from the AppImage payload, placing it in the
-	# right hicolor bucket for its type (SVG -> scalable/apps).
-	# Returns 0 on success and sets ICON_TARGET global; else 1.
-	local appimage="$1" base="$2"
-	local tmp
-	tmp=$(mktemp -d)
-	# Guarded so it is safe if the RETURN trap also fires in a caller scope
-	# (bash keeps the trap set for the enclosing function).
-	trap '[ -n "${tmp-}" ] && rm -rf "$tmp" || true' RETURN
+# Extract an AppImage payload into <destdir>/squashfs-root. Returns 1 when the
+# self-extractor fails or produces no tree.
+extract_appimage() {
+	# $1 appimage_path, $2 dest_dir
+	local appimage="$1" destdir="$2"
+	mkdir -p "$destdir"
+	(cd "$destdir" && "$appimage" --appimage-extract >/dev/null 2>&1) || return 1
+	[ -d "$destdir/squashfs-root" ] || return 1
+	return 0
+}
 
-	# AppImage self-extractor writes into squashfs-root
-	if ! (cd "$tmp" && "$appimage" --appimage-extract >/dev/null 2>&1); then
-		return 1
-	fi
+# Print the path of the .desktop bundled in an extracted AppImage tree, or
+# nothing. Prefers the AppDir root (the location the AppImage spec expects),
+# then usr/share/applications.
+payload_desktop_path() {
+	# $1 squashfs_root
+	local root="$1" d f
+	for d in "$root" "$root/usr/share/applications"; do
+		[ -d "$d" ] || continue
+		f=$(find "$d" -maxdepth 1 -type f -name '*.desktop' -print 2>/dev/null | sort | head -n 1 || true)
+		if [ -n "$f" ]; then
+			printf '%s' "$f"
+			return 0
+		fi
+	done
+	return 1
+}
 
-	local root="$tmp/squashfs-root"
+# Read a few keys from the [Desktop Entry] group of a bundled .desktop into
+# PAYLOAD_* globals. Only unlocalized keys are used; comments and
+# [Desktop Action ...] groups are ignored. The payload is assumed well-formed,
+# so values are taken verbatim (no MIME-database validation).
+# shellcheck disable=SC2034 # PAYLOAD_* globals are read by the caller (TUI).
+payload_desktop_read() {
+	# $1 desktop_file
+	local file="$1" in_entry=false line key value
+	PAYLOAD_NAME=""
+	PAYLOAD_COMMENT=""
+	PAYLOAD_CATEGORIES=""
+	PAYLOAD_MIMETYPES=""
+	[ -f "$file" ] || return 0
+	while IFS= read -r line || [ -n "$line" ]; do
+		line=${line%$'\r'}
+		case "$line" in
+		"["*"]")
+			[ "$line" = "[Desktop Entry]" ] && in_entry=true || in_entry=false
+			continue
+			;;
+		esac
+		[ "$in_entry" = true ] || continue
+		case "$line" in
+		"#"* | "") continue ;;
+		*=*)
+			key=${line%%=*}
+			value=${line#*=}
+			case "$key" in
+			Name) PAYLOAD_NAME="$value" ;;
+			Comment) PAYLOAD_COMMENT="$value" ;;
+			Categories) PAYLOAD_CATEGORIES="$value" ;;
+			MimeType) PAYLOAD_MIMETYPES="$value" ;;
+			esac
+			;;
+		esac
+	done <"$file"
+}
+
+# Print the bundled icon path from an extracted AppImage tree, or nothing.
+# Priority: .DirIcon, then SVGs, then PNGs in the usual locations.
+payload_icon_path() {
+	# $1 squashfs_root
+	local root="$1" d candidate
 	[ -d "$root" ] || return 1
-
-	# Priority: .DirIcon, then SVGs, then PNGs commonly placed in icons dirs.
-	local candidate=""
 	if [ -f "$root/.DirIcon" ]; then
-		candidate="$root/.DirIcon"
+		printf '%s' "$root/.DirIcon"
+		return 0
+	fi
+	for d in "$root/usr/share/icons" "$root/usr/share/pixmaps" "$root"; do
+		[ -d "$d" ] || continue
+		candidate=$(find "$d" -type f -name '*.svg' -print 2>/dev/null | head -n 1 || true)
+		if [ -n "$candidate" ]; then
+			printf '%s' "$candidate"
+			return 0
+		fi
+		candidate=$(find "$d" -type f -name '*.png' -print 2>/dev/null | head -n 1 || true)
+		if [ -n "$candidate" ]; then
+			printf '%s' "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
+try_extract_icon_from_appimage() {
+	# $1 appimage_path, $2 dest_basename_without_ext, [$3 pre-extracted root]
+	# Copies the bundled icon into the right hicolor bucket (SVG -> scalable).
+	# When $3 (a squashfs-root) is given the AppImage is not extracted again.
+	# Returns 0 on success and sets ICON_TARGET global; else 1.
+	local appimage="$1" base="$2" provided_root="${3:-}"
+	local tmp="" root=""
+
+	if [ -n "$provided_root" ]; then
+		root="$provided_root"
 	else
-		# Prefer SVG, then PNG anywhere typical under usr/share/icons or top-level app icons
-		# Gather a few common locations first to avoid scanning everything
-		local -a search_dirs
-		search_dirs=(
-			"$root/usr/share/icons"
-			"$root/usr/share/pixmaps"
-			"$root"
-		)
-		for d in "${search_dirs[@]}"; do
-			[ -d "$d" ] || continue
-			# SVG first
-			candidate=$(find "$d" -type f -name '*.svg' -print 2>/dev/null | head -n 1 || true)
-			if [ -n "$candidate" ]; then break; fi
-			# PNG next
-			candidate=$(find "$d" -type f -name '*.png' -print 2>/dev/null | head -n 1 || true)
-			if [ -n "$candidate" ]; then break; fi
-		done
+		tmp=$(mktemp -d)
+		# Guarded so it is safe if the RETURN trap also fires in a caller scope
+		# (bash keeps the trap set for the enclosing function).
+		trap '[ -n "${tmp-}" ] && rm -rf "$tmp" || true' RETURN
+		extract_appimage "$appimage" "$tmp" || return 1
+		root="$tmp/squashfs-root"
 	fi
 
+	local candidate
+	candidate=$(payload_icon_path "$root" || true)
 	if [ -z "$candidate" ]; then
 		return 1
 	fi
@@ -289,7 +358,7 @@ refresh_desktop_caches() {
 # --- Core operations --------------------------------------------------------
 
 core_install() {
-	local appimage_path="" name="" categories="Utility;" comment="" custom_icon="" exec_args="" force=false skip_validation=false
+	local appimage_path="" name="" categories="Utility;" comment="" custom_icon="" exec_args="" mime_types="" force=false skip_validation=false
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -322,6 +391,11 @@ core_install() {
 		--exec-args)
 			shift
 			exec_args="${1:-}"
+			shift || true
+			;;
+		--mime-types)
+			shift
+			mime_types="${1:-}"
 			shift || true
 			;;
 		--force)
@@ -400,7 +474,9 @@ core_install() {
 		log "Copying provided icon to: $icon_target"
 		copy_file "$custom_icon" "$icon_target"
 	else
-		if is_appimage "$abs_appimage" && try_extract_icon_from_appimage "$abs_appimage" "$app_slug"; then
+		# The TUI extracts the AppImage once for inspection and exports the tree
+		# so the icon doesn't trigger a second extraction.
+		if is_appimage "$abs_appimage" && try_extract_icon_from_appimage "$abs_appimage" "$app_slug" "${APPIMAGE_MANAGER_EXTRACTED_ROOT:-}"; then
 			icon_target="$ICON_TARGET"
 			log "Extracted icon to: $icon_target"
 		else
@@ -477,6 +553,9 @@ TryExec=$dest_appimage
 Comment=${comment}
 StartupNotify=true
 DESKTOP
+	if [ -n "$mime_types" ]; then
+		printf 'MimeType=%s\n' "$mime_types" >>"$desktop_file"
+	fi
 
 	chmod +x "$desktop_file"
 
@@ -503,10 +582,16 @@ DESKTOP
 }
 
 core_list() {
-	# Prints one TSV row per installed app:
+	# Prints one TSV row per installed app, sorted by display name (case-
+	# insensitive):
 	#   slug \t name \t appimage_path \t desktop_path \t icon_path \t wrapper_path \t tracked
 	# Fields are always non-empty (a "-" placeholder is used for unknown icon paths)
 	# because `read` collapses consecutive/empty IFS fields and would misalign columns.
+	_core_list_unsorted | sort -t$'\t' -k2,2f
+}
+
+# Unsorted rows (registry order, then the legacy scan); see core_list.
+_core_list_unsorted() {
 	local data_dir registry
 	data_dir=$(get_data_dir)
 	registry=$(get_registry_file)
@@ -781,7 +866,9 @@ core_update() {
 export_all() {
 	export -f log warn err die command_exists abs_path slugify copy_file \
 		is_appimage icon_extension icon_dir_for_ext try_extract_icon_from_appimage \
+		extract_appimage payload_desktop_path payload_desktop_read payload_icon_path \
 		shorten_home get_data_dir get_install_dir get_registry_file \
 		refresh_desktop_caches \
+		_core_list_unsorted \
 		core_install core_list core_uninstall core_registry_set_icon core_update
 }

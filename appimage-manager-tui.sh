@@ -23,6 +23,23 @@ command_exists gum || die "gum is required for TUI mode. Install it with: sudo p
 
 export_all
 
+# --- Payload inspection state ------------------------------------------------
+# The installer extracts the selected AppImage once and reads its bundled
+# .desktop to prefill the wizard. These globals hold that state; the temp tree
+# is removed on exit (and whenever a different file is inspected).
+INSPECT_DIR=""
+SUGGEST_NAME=""
+SUGGEST_COMMENT=""
+SUGGEST_CATEGORIES=""
+SUGGEST_MIMETYPES=""
+ICON_BUNDLED=false
+
+cleanup_inspect_dir() {
+	if [ -n "${INSPECT_DIR:-}" ]; then
+		rm -rf "$INSPECT_DIR"
+	fi
+}
+
 # --- Palette ----------------------------------------------------------------
 # Semantic accents as ANSI base colors (0-15), so the terminal theme defines
 # the actual hue. Normal text uses the terminal default (no color); the app
@@ -274,12 +291,55 @@ select_installed_app() {
 
 # --- Wizard ---------------------------------------------------------------
 
+# Drop any inspection results and the extracted tree.
+reset_inspection() {
+	SUGGEST_NAME=""
+	SUGGEST_COMMENT=""
+	SUGGEST_CATEGORIES=""
+	SUGGEST_MIMETYPES=""
+	ICON_BUNDLED=false
+	if [ -n "${INSPECT_DIR:-}" ]; then
+		rm -rf "$INSPECT_DIR"
+		INSPECT_DIR=""
+	fi
+}
+
+# Extract the AppImage once and read its bundled .desktop/icon to prefill the
+# wizard. Never fails the flow: on a non-AppImage or a failed extract it just
+# leaves the suggestions empty and ICON_BUNDLED=false.
+inspect_appimage() {
+	local path="$1"
+	reset_inspection
+	INSPECT_DIR=$(mktemp -d)
+
+	if ! gum spin --spinner dot --title "Inspecting AppImage…" -- \
+		bash -c 'extract_appimage "$@"' _ "$path" "$INSPECT_DIR"; then
+		reset_inspection
+		return 0
+	fi
+
+	local root="$INSPECT_DIR/squashfs-root"
+	local icon desktop
+	icon=$(payload_icon_path "$root" || true)
+	[ -n "$icon" ] && ICON_BUNDLED=true
+
+	desktop=$(payload_desktop_path "$root" || true)
+	if [ -n "$desktop" ]; then
+		payload_desktop_read "$desktop"
+		SUGGEST_NAME="$PAYLOAD_NAME"
+		SUGGEST_COMMENT="$PAYLOAD_COMMENT"
+		SUGGEST_CATEGORIES="$PAYLOAD_CATEGORIES"
+		SUGGEST_MIMETYPES="$PAYLOAD_MIMETYPES"
+	fi
+	return 0
+}
+
 # Esc backs one level: top step returns to the menu, other steps re-render the
 # previous one. Enter accepts the current value/default and advances. Each step
 # starts from a cleared screen.
 tui_install() {
 	local appimage="" name="" comment="" categories="Utility;" exec_args="" icon=""
-	local base="" force=false skip_validation=false step="appimage"
+	local mimetypes="" base="" force=false skip_validation=false step="appimage"
 
 	while [ "$step" != "done" ]; do
 		clear_screen
@@ -306,13 +366,22 @@ tui_install() {
 				skip_validation=true
 			fi
 
+			# Extract once and read the bundled .desktop/icon for suggestions.
+			if [ "$skip_validation" = false ]; then
+				inspect_appimage "$appimage"
+			else
+				reset_inspection
+			fi
+
 			base=$(basename "$appimage")
 			base=${base%.*}
 			step="name"
 			;;
 
 		name)
-			if ! name=$(gum input --header "App name" --placeholder "App name" --value "$base"); then
+			local name_default="$base"
+			[ -n "$SUGGEST_NAME" ] && name_default="$SUGGEST_NAME"
+			if ! name=$(gum input --header "App name" --placeholder "App name" --value "$name_default"); then
 				step="appimage"
 				continue
 			fi
@@ -325,7 +394,7 @@ tui_install() {
 			;;
 
 		comment)
-			if ! comment=$(gum input --header "Comment" --placeholder "Comment (optional)"); then
+			if ! comment=$(gum input --header "Comment" --placeholder "Comment (optional)" --value "$SUGGEST_COMMENT"); then
 				step="name"
 				continue
 			fi
@@ -333,20 +402,35 @@ tui_install() {
 			;;
 
 		category)
+			local -a cat_opts=("Utility" "Development" "Office" "Graphics" "AudioVideo"
+				"Network" "Game" "Education" "Science" "System" "Custom…")
+			local bundled_label=""
+			if [ -n "$SUGGEST_CATEGORIES" ]; then
+				bundled_label="Bundled: $SUGGEST_CATEGORIES"
+				cat_opts=("$bundled_label" "${cat_opts[@]}")
+			fi
 			local cat_choice
-			if ! cat_choice=$(gum choose --header "Category" \
-				"Utility" "Development" "Office" "Graphics" "AudioVideo" \
-				"Network" "Game" "Education" "Science" "System" "Custom…"); then
+			if ! cat_choice=$(gum choose --header "Category" -- "${cat_opts[@]}"); then
 				step="comment"
 				continue
 			fi
-			if [ "$cat_choice" = "Custom…" ]; then
+			if [ -n "$bundled_label" ] && [ "$cat_choice" = "$bundled_label" ]; then
+				categories="$SUGGEST_CATEGORIES"
+			elif [ "$cat_choice" = "Custom…" ]; then
 				if ! categories=$(gum input --header "Categories" --placeholder "Categories" --value "Utility;"); then
 					continue
 				fi
 				[ -n "$categories" ] || categories="Utility;"
 			else
 				categories=$(category_value "$cat_choice")
+			fi
+			step="mimetypes"
+			;;
+
+		mimetypes)
+			if ! mimetypes=$(gum input --header "MIME types (optional)" --placeholder "e.g. image/png;text/plain;" --value "$SUGGEST_MIMETYPES"); then
+				step="category"
+				continue
 			fi
 			step="args"
 			;;
@@ -364,7 +448,7 @@ tui_install() {
 				"Wayland (auto)" \
 				"Wayland (native)" \
 				"Custom…"); then
-				step="category"
+				step="mimetypes"
 				continue
 			fi
 			exec_args=""
@@ -395,9 +479,17 @@ tui_install() {
 			;;
 
 		icon)
+			local -a icon_opts
+			if [ "$ICON_BUNDLED" = true ]; then
+				icon_opts=("Auto-extract (icon is bundled)" "Provide custom icon")
+			else
+				gum style --foreground "$COLOR_WARNING" --bold "No icon is bundled with this AppImage."
+				gum style --foreground "$COLOR_WARNING" \
+					"Provide one, or continue without a themed icon."
+				icon_opts=("Provide custom icon" "Continue without icon")
+			fi
 			local icon_choice
-			if ! icon_choice=$(gum choose --header "Icon" \
-				"Auto-extract (recommended)" "Provide custom icon"); then
+			if ! icon_choice=$(gum choose --header "Icon" "${icon_opts[@]}"); then
 				step="args"
 				continue
 			fi
@@ -431,6 +523,7 @@ tui_install() {
 				printf 'AppImage:   %s\n' "$(shorten_home "$appimage")"
 				printf 'Name:       %s\n' "$name"
 				printf 'Categories: %s\n' "$categories"
+				printf 'Mime types: %s\n' "${mimetypes:-<none>}"
 				printf 'Exec args:  %s\n' "${exec_args:-<none>}"
 				printf 'Icon:       %s\n' "$icon_display"
 				printf 'Overwrite:  %s\n' "$force"
@@ -441,7 +534,14 @@ tui_install() {
 				return
 			fi
 
-			local -a args=(--appimage "$appimage" --name "$name" --categories "$categories" --comment "$comment" --exec-args "$exec_args")
+			# Let core_install reuse the tree we already extracted for the icon.
+			if [ -n "${INSPECT_DIR:-}" ] && [ "$skip_validation" = false ]; then
+				export APPIMAGE_MANAGER_EXTRACTED_ROOT="$INSPECT_DIR/squashfs-root"
+			else
+				unset APPIMAGE_MANAGER_EXTRACTED_ROOT || true
+			fi
+
+			local -a args=(--appimage "$appimage" --name "$name" --categories "$categories" --comment "$comment" --mime-types "$mimetypes" --exec-args "$exec_args")
 			[ -n "$icon" ] && args+=(--icon "$icon")
 			[ "$force" = true ] && args+=(--force)
 			[ "$skip_validation" = true ] && args+=(--skip-validation)
@@ -478,6 +578,10 @@ tui_list() {
 			[ "$tracked" = "0" ] && status="🔴 legacy"
 			printf '%s\t%s\t%s\n' "$name" "$(shorten_home "$appimage")" "$status"
 		done <<<"$rows"
+		# Cosmetic gum bug: in `gum table --print` the first data row is drawn
+		# with the (bold) Header style because its StyleFunc treats row 0 as the
+		# header, while lipgloss passes the first data row as 0. Present in gum
+		# v2.0.0–v2.0.2; left as-is (only the first row is bold).
 	} | gum table --print --separator $'\t' --columns "Name,Path,Status" --widths 30,45,12
 	pause_key
 }
@@ -668,7 +772,7 @@ restore_terminal() {
 		stty "$SAVED_STTY" 2>/dev/null || true
 	fi
 }
-trap restore_terminal EXIT
+trap 'restore_terminal; cleanup_inspect_dir' EXIT
 if [ -n "$SAVED_STTY" ]; then
 	stty -echo 2>/dev/null || true
 fi
