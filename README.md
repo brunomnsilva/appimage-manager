@@ -39,6 +39,24 @@ It ships with two frontends that share the same core logic:
   the type is normally determined from the filename or content magic bytes).
 - Development only: `shellcheck` and `shfmt` (for `make test` / `make fmt`).
 
+## Installation
+
+```bash
+git clone https://github.com/brunomnsilva/appimage-manager
+cd appimage-manager
+make install
+```
+
+`make install` bundles the library and copies both commands into
+`~/.local/bin` (override with `make install PREFIX=/usr/local`). Ensure that
+directory is on your `PATH`, then run `appimage-manager-tui` or
+`appimage-manager`. Remove them again with `make uninstall`.
+
+Prefer not to build? Download the prebuilt `appimage-manager` and
+`appimage-manager-tui` from the
+[latest release](https://github.com/brunomnsilva/appimage-manager/releases) and
+drop them in a directory on your `PATH`.
+
 ## Project structure
 
 ```
@@ -46,11 +64,13 @@ appimage-manager.sh          # CLI entrypoint
 appimage-manager-tui.sh      # TUI entrypoint (gum)
 lib/core.sh                  # shared library (no side effects)
 scripts/build.sh             # bundles lib/core.sh into dist/ entrypoints
-Makefile                     # bundle / test / lint / fmt / clean
+Makefile                     # bundle / test / lint / fmt / install / uninstall / clean
 tests/run-tests.sh           # headless test harness
 ```
 
 ## Quick start
+
+Run directly from a clone (without installing):
 
 ### TUI
 
@@ -72,6 +92,9 @@ chmod +x appimage-manager.sh
 This copies the AppImage to `~/Applications/`, writes
 `~/.local/share/applications/<slug>.desktop`, and installs an icon when one can
 be extracted.
+
+If you ran `make install`, use the installed commands instead:
+`appimage-manager-tui` and `appimage-manager`.
 
 ## TUI usage
 
@@ -202,13 +225,9 @@ dist/appimage-manager
 dist/appimage-manager-tui
 ```
 
-Install them into `~/.local/bin` (override the destination with `PREFIX`):
-
-```bash
-make install            # -> ~/.local/bin
-make install PREFIX=/usr/local
-make uninstall          # remove them from $(PREFIX)/bin
-```
+To install them (`~/.local/bin` by default, override with `PREFIX`), see
+[Installation](#installation). Bundling only, without installing, is just
+`make bundle`.
 
 This is automated in CI (`.github/workflows/`): every push and pull request
 runs the tests and uploads `dist/` as a workflow artifact, and pushing a `v*`
